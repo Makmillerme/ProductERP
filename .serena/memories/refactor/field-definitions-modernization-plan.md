@@ -1,0 +1,1 @@
+Plan: remove system column from field definitions table, remove isSystem from form UI, show — for composite data type. Terminology: widgetType=відображення (how), dataType=тип даних (what). Composite has no data type at field level.

@@ -1,0 +1,135 @@
+{
+  "layout": {
+    "nav": {
+      "navigation": "Навігація",
+      "home": "Головна",
+      "management": "Управління",
+      "dataModel": "Модель даних",
+      "users": "Користувачі",
+      "productCatalog": "Облік товару"
+    },
+    "breadcrumb": {
+      "home": "Головна"
+    },
+    "routes": {
+      "settings": "Налаштування",
+      "kanban": "Облік авто"
+    },
+    "userMenu": {
+      "account": "Обліковий запис",
+      "settings": "Налаштування",
+      "signOut": "Вийти"
+    },
+    "aria": {
+      "calculator": "Відкрити калькулятор",
+      "userMenu": "Відкрити меню користувача"
+    }
+  },
+  "fieldSettings": {
+    "label": "Назва",
+    "code": "Код",
+    "dataType": "Тип даних",
+    "widgetType": "Відображення",
+    "unit": "Одиниці вимірювання",
+    "unitCategory": "Категорія",
+    "unitDimension": "Розмірність",
+    "unitCustom": "Власне значення",
+    "placeholder": "Placeholder",
+    "defaultValue": "Значення за замовчуванням",
+    "presetValues": "Опції (JSON)",
+    "options": "Опції",
+    "formula": "Формула",
+    "validation": "Валідація",
+    "validationHint": "Обмеження для значення поля (необовʼязково)"
+  },
+  "validation": {
+    "required": "Обовʼязкове поле",
+    "requiredHint": "Не можна залишити порожнім",
+    "minLength": "Мін. символів",
+    "maxLength": "Макс. символів",
+    "minLengthHint": "Наприклад: 1",
+    "maxLengthHint": "Наприклад: 255",
+    "minRows": "Мін. висота (рядків)",
+    "maxRows": "Макс. висота (рядків)",
+    "minRowsHint": "Тільки для текстового поля",
+    "min": "Мін. значення",
+    "max": "Макс. значення",
+    "minHint": "Наприклад: 0",
+    "maxHint": "Наприклад: 999999",
+    "maxHintFloat": "Наприклад: 999999.99",
+    "maxFileSizeBytes": "Макс. розмір файлу (байт)",
+    "maxFileSizeHint": "Опційно, наприклад: 5242880 для 5 МБ"
+  },
+  "composite": {
+    "layout": "Макет",
+    "layoutRow": "В ряд",
+    "layoutColumn": "В стовпець",
+    "layoutGrid": "Сітка",
+    "gridColumns": "Стовпців",
+    "gridRows": "Рядків",
+    "subFields": "Підполя",
+    "add": "Додати",
+    "noSubFields": "Немає підполів. Натисніть «Додати».",
+    "subFieldName": "Назва",
+    "subFieldCode": "Slug (code)",
+    "deleteConfirmTitle": "Видалити підполе?",
+    "deleteConfirmDescription": "Підполе «{label}» ({code}) буде видалено. Цю дію не можна скасувати.",
+    "deleteConfirmFallback": "Цю дію не можна скасувати.",
+    "deleteButton": "Видалити",
+    "cancelButton": "Скасувати",
+    "newFieldLabel": "Нове поле",
+    "deleteSubField": "Видалити підполе"
+  },
+  "placeholders": {
+    "selectCategory": "Оберіть категорію",
+    "selectDimension": "Оберіть розмірність",
+    "unitCustomExample": "Наприклад: км/год, од/м³",
+    "placeholderHint": "Текст-підказка",
+    "defaultValueHint": "За замовчуванням",
+    "presetValuesExample": "[{\"value\":\"opt1\",\"label\":\"Опція 1\"}]",
+    "optionName": "Назва опції",
+    "formulaHint": "{x}+{y} — slug полів",
+    "labelExample": "Довжина",
+    "codeExample": "length"
+  },
+  "dataTypes": {
+    "string": "Текст",
+    "integer": "Ціле число",
+    "float": "Дробне число",
+    "boolean": "Так/Ні",
+    "date": "Дата",
+    "datetime": "Дата і час",
+    "media": "Медіа",
+    "file": "Файл"
+  },
+  "settings": {
+    "title": "Налаштування",
+    "profile": "Профіль",
+    "language": "Мова",
+    "languageDescription": "Мова інтерфейсу",
+    "theme": "Тема",
+    "themeDescription": "Зовнішній вигляд (світла, темна, система)",
+    "profileName": "Ім'я",
+    "profileEmail": "Email",
+    "profileRole": "Роль",
+    "profileAvatar": "Аватар",
+    "profileSignInPrompt": "Увійдіть, щоб бачити профіль та керувати даними.",
+    "settingsDescription": "Тут будуть загальні налаштування додатку (мова, тема, сповіщення тощо)."
+  },
+  "fieldDefinitions": {
+    "codeAlreadyExists": "Код поля вже існує"
+  },
+  "widgetTypes": {
+    "text_input": "Текстовий рядок",
+    "number_input": "Числовий рядок",
+    "textarea": "Текстове поле",
+    "select": "Спадний список",
+    "multiselect": "Чекбокс",
+    "radio": "Вибір одного",
+    "calculated": "Формула",
+    "media_gallery": "Галерея",
+    "file_upload": "Файли",
+    "datepicker": "Дата",
+    "composite": "Складене поле"
+  }
+}

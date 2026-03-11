@@ -1,0 +1,1 @@
+CompositeSubFieldsEditor: 1) Delete button in top-right (top-2 right-2), pr-12 for content spacing. 2) Allow deleting last subfield - removed disabled when subFields.length<=1. 3) Allow clearing slug completely - use raw.trim()==="" ? "" : (slugify(raw)||sf.code) instead of slugify(e.target.value)||sf.code.

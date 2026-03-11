@@ -1,0 +1,135 @@
+{
+  "layout": {
+    "nav": {
+      "navigation": "Navigation",
+      "home": "Home",
+      "management": "Management",
+      "dataModel": "Data model",
+      "users": "Users",
+      "productCatalog": "Product catalog"
+    },
+    "breadcrumb": {
+      "home": "Home"
+    },
+    "routes": {
+      "settings": "Settings",
+      "kanban": "Vehicle registry"
+    },
+    "userMenu": {
+      "account": "Account",
+      "settings": "Settings",
+      "signOut": "Sign out"
+    },
+    "aria": {
+      "calculator": "Open calculator",
+      "userMenu": "Open user menu"
+    }
+  },
+  "fieldSettings": {
+    "label": "Name",
+    "code": "Code",
+    "dataType": "Data type",
+    "widgetType": "Display",
+    "unit": "Units of measurement",
+    "unitCategory": "Category",
+    "unitDimension": "Dimension",
+    "unitCustom": "Custom value",
+    "placeholder": "Placeholder",
+    "defaultValue": "Default value",
+    "presetValues": "Options (JSON)",
+    "options": "Options",
+    "formula": "Formula",
+    "validation": "Validation",
+    "validationHint": "Field value constraints (optional)"
+  },
+  "validation": {
+    "required": "Required field",
+    "requiredHint": "Cannot be left empty",
+    "minLength": "Min. characters",
+    "maxLength": "Max. characters",
+    "minLengthHint": "E.g.: 1",
+    "maxLengthHint": "E.g.: 255",
+    "minRows": "Min. height (rows)",
+    "maxRows": "Max. height (rows)",
+    "minRowsHint": "For text area only",
+    "min": "Min. value",
+    "max": "Max. value",
+    "minHint": "E.g.: 0",
+    "maxHint": "E.g.: 999999",
+    "maxHintFloat": "E.g.: 999999.99",
+    "maxFileSizeBytes": "Max. file size (bytes)",
+    "maxFileSizeHint": "Optional, e.g.: 5242880 for 5 MB"
+  },
+  "composite": {
+    "layout": "Layout",
+    "layoutRow": "In row",
+    "layoutColumn": "In column",
+    "layoutGrid": "Grid",
+    "gridColumns": "Columns",
+    "gridRows": "Rows",
+    "subFields": "Subfields",
+    "add": "Add",
+    "noSubFields": "No subfields. Click «Add».",
+    "subFieldName": "Name",
+    "subFieldCode": "Slug (code)",
+    "deleteConfirmTitle": "Delete subfield?",
+    "deleteConfirmDescription": "Subfield «{label}» ({code}) will be deleted. This action cannot be undone.",
+    "deleteConfirmFallback": "This action cannot be undone.",
+    "deleteButton": "Delete",
+    "cancelButton": "Cancel",
+    "newFieldLabel": "New field",
+    "deleteSubField": "Delete subfield"
+  },
+  "placeholders": {
+    "selectCategory": "Select category",
+    "selectDimension": "Select dimension",
+    "unitCustomExample": "E.g.: km/h, pcs/m³",
+    "placeholderHint": "Placeholder text",
+    "defaultValueHint": "Default",
+    "presetValuesExample": "[{\"value\":\"opt1\",\"label\":\"Option 1\"}]",
+    "optionName": "Option name",
+    "formulaHint": "{x}+{y} — field slugs",
+    "labelExample": "Length",
+    "codeExample": "length"
+  },
+  "dataTypes": {
+    "string": "Text",
+    "integer": "Integer",
+    "float": "Decimal",
+    "boolean": "Yes/No",
+    "date": "Date",
+    "datetime": "Date and time",
+    "media": "Media",
+    "file": "File"
+  },
+  "fieldDefinitions": {
+    "codeAlreadyExists": "Field code already exists"
+  },
+  "widgetTypes": {
+    "text_input": "Text input",
+    "number_input": "Number input",
+    "textarea": "Text area",
+    "select": "Dropdown",
+    "multiselect": "Checkbox",
+    "radio": "Radio",
+    "calculated": "Formula",
+    "media_gallery": "Gallery",
+    "file_upload": "Files",
+    "datepicker": "Date",
+    "composite": "Composite field"
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": "Profile",
+    "language": "Language",
+    "languageDescription": "Interface language",
+    "theme": "Theme",
+    "themeDescription": "Appearance (light, dark, system)",
+    "profileName": "Name",
+    "profileEmail": "Email",
+    "profileRole": "Role",
+    "profileAvatar": "Avatar",
+    "profileSignInPrompt": "Sign in to view profile and manage data.",
+    "settingsDescription": "General app settings (language, theme, notifications, etc.)."
+  }
+}

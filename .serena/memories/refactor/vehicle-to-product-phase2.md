@@ -1,0 +1,1 @@
+Phase 2 Vehicle→Product refactor completed. products-db.ts, product-media-upload.ts, product-document-upload.ts created. API /api/products/*. Types Product, ProductMedia, ProductFilterState, ProductColumnId. All components and API routes updated. Build passes.
