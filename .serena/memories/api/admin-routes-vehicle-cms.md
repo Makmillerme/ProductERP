@@ -1,4 +1,4 @@
-# Vehicle CMS Admin API Routes (Restructured)
+# [DEPRECATED] Див. api/admin-routes-product-cms. Vehicle CMS Admin API Routes (Restructured)
 
 All admin routes use `requireAdmin()` auth guard (checks ADMIN_ROLE or OWNER_ROLE).
 All use `export const dynamic = "force-dynamic"`.

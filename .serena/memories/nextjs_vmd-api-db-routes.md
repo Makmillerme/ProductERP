@@ -1,5 +1,3 @@
-# nextjs_vmd — API та БД
+API: /api/products (GET, POST), /api/products/[id] (GET, PATCH, DELETE), [id]/media, [id]/documents, [id]/media/[mediaId], [id]/documents/[docId]; /api/admin/categories, [id], [id]/tabs; /api/admin/product-types, [id]; /api/admin/field-definitions, [id]; /api/admin/statuses, [id]; /api/admin/tabs/[id]; /api/admin/display-config; /api/admin/parser/import, field-mapping, auto-detect-types; /api/admin/users, [userId]/set-role; /api/admin/owner/transfer; /api/product-config/category/[categoryId], [productTypeId], default; /api/categories, /api/statuses, /api/roles, /api/me, /api/auth/[...all], /api/currency/goverla.
 
-- **API роути:** `src/app/api/vehicles/route.ts` (GET list, POST create), `src/app/api/vehicles/[id]/route.ts` (GET, PATCH, DELETE). Default sortKey created_at desc у list.
-- **Робота з БД:** `src/lib/vehicles-db.ts` — listVehicles (pagination, search, filter, sort), getVehicle, createVehicle, updateVehicle, deleteVehicle. Default sort у listVehicles.
-- **Prisma:** схема в `prisma/schema.prisma`, клієнт генерується в node_modules. Підключення через DATABASE_URL у .env.
+БД: products-db.ts — listProducts, getProduct, create, update, delete; product-field-values.ts — upsertProductFieldValues, loadProductFieldValues; Prisma output ../src/generated/prisma.

@@ -1,11 +1,5 @@
-# nextjs_vmd — стек і структура
+Стек: Next.js 15.5.12, TypeScript strict, React 19.1.0; Tailwind v4 (Flex/Grid), clsx, tailwind-merge; Shadcn/ui, Lucide; TanStack Query v5 + persister; nuqs; Zustand; Prisma 7.4 + Postgres; Better-Auth; date-fns, sonner. Node >=20.19.0.
 
-- **Next.js 15** App Router, **TypeScript** (strict), **React 19**
-- **Стилі:** Tailwind CSS v4 (тільки Flex/Grid), clsx, tailwind-merge
-- **UI:** Shadcn/ui, Lucide React
-- **Форми:** React Hook Form + Zod
-- **Стейт:** Zustand (глобальний), nuqs (URL), TanStack Query (серверний)
-- **БД:** Prisma, Postgres (локально пароль Rty45678+)
-- **Утиліти:** date-fns, sonner
+Скрипти: generate:locales перед dev/build; db:seed, db:clear, db:clear-statuses; clean для .next.
 
-Корінь додатку: `nextjs_vmd/`. Вхід: `src/app/`, layout у `src/components/layout/`. Фічі в `src/features/` (наприклад `vehicles/`). API в `src/app/api/`. Ліба: `src/lib/` (query-client, vehicles-db, utils).
+Структура: src/app/ (routes), src/features/ (products, management, currency, home, kanban, settings), src/lib/ (prisma, products-db, product-field-values, auth, query-client), src/config/ (navigation, permissions, product-documents, composite-field, field-constructor, locales).

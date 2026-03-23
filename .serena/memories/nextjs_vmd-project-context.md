@@ -1,11 +1,3 @@
-# nextjs_vmd — контекст проєкту
+ProductERP (nextjs_vmd). Next.js 15 App Router, React 19, Tailwind 4, Shadcn, TanStack Query (localStorage persist), nuqs, Prisma/Postgres, Better-Auth.
 
-Next.js 15 (App Router) додаток парсера ВМД. Стек: TypeScript, React 19, Tailwind v4, Shadcn/ui, TanStack Query (з персистенцією в localStorage), nuqs, Prisma/Postgres.
-
-Ключові шляхи:
-- `src/features/vehicles/` — таблиця авто, CRUD, sheet, пагінація, фільтри, сортування
-- `src/app/api/vehicles/` — API роути
-- `src/components/layout/providers.tsx` — PersistQueryClientProvider (no-op persister на сервері)
-- `src/lib/query-client.ts`, `vehicles-db.ts`
-
-Проєкт активовано в Serena як окремий проєкт (не vmd / new_nodejs_vmd_parser).
+Шляхи: src/features/products/ — products-page, product-detail-sheet, EAV ProductFieldValue, widgets; src/features/management/components/products-config/ — categories, product-types, field-definitions, tabs-config, statuses, display; src/app/api/products, api/admin/*, api/product-config; src/lib/products-db.ts, product-field-values.ts. providers.tsx — PersistQueryClientProvider. query-client.ts, query-keys.ts. Scripts: generate:locales, clean, db:seed, db:clear, db:clear-statuses.

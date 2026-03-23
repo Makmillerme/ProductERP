@@ -1,7 +1,7 @@
 # Dynamic Vehicle CMS Implementation
 
 ## Overview
-Full 7-phase implementation of a dynamic vehicle data management CMS.
+[DEPRECATED] Vehicle→Product. Див. nextjs_vmd-current-state-2025-03. Full 7-phase implementation of a dynamic vehicle data management CMS.
 
 ## Database Models (schema.prisma)
 6 new models added:
