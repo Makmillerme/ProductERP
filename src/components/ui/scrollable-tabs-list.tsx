@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useLocale } from "@/lib/locale-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TabsList } from "@/components/ui/tabs";
@@ -15,6 +16,7 @@ export function ScrollableTabsList({
   children,
   ...props
 }: ScrollableTabsListProps) {
+  const { t } = useLocale();
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = React.useState(false);
   const [canScrollRight, setCanScrollRight] = React.useState(false);
@@ -54,7 +56,7 @@ export function ScrollableTabsList({
           size="icon"
           className="absolute left-0 top-1/2 z-10 h-7 w-6 -translate-y-1/2 shrink-0 rounded-md bg-background/80 shadow-md backdrop-blur hover:bg-muted"
           onClick={() => scroll("left")}
-          aria-label="Прокрутити таби вліво"
+          aria-label={t("scrollableTabs.scrollLeft")}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -79,7 +81,7 @@ export function ScrollableTabsList({
           size="icon"
           className="absolute right-0 top-1/2 z-10 h-7 w-6 -translate-y-1/2 shrink-0 rounded-md bg-background/80 shadow-md backdrop-blur hover:bg-muted"
           onClick={() => scroll("right")}
-          aria-label="Прокрутити таби вправо"
+          aria-label={t("scrollableTabs.scrollRight")}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>

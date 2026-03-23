@@ -99,6 +99,6 @@
 
 ## Джерела
 
-- `src/features/vehicles/types.ts` — тип Product
-- `src/features/vehicles/components/dynamic-field-renderer.tsx` — логіка рендерингу
+- `src/features/products/types.ts` — тип Product
+- `src/features/products/components/dynamic-field-renderer.tsx` — логіка рендерингу
 - `prisma/schema.prisma` — FieldDefinition.isSystem, systemColumn

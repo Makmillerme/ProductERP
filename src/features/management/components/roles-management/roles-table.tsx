@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "@/lib/locale-provider";
 import {
   Table,
   TableBody,
@@ -11,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ADMIN_SYSTEM_ROLE_ID } from "@/config/roles";
 import type { ApiRoleListItem } from "./types";
+import { formatDateForDisplay } from "@/features/products/lib/field-utils";
 
 type RolesTableProps = {
   roles: ApiRoleListItem[];
@@ -18,21 +20,17 @@ type RolesTableProps = {
   onRowClick: (role: ApiRoleListItem) => void;
 };
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("uk-UA", { dateStyle: "short" });
-}
-
 export function RolesTable({
   roles,
   totalCount,
   onRowClick,
 }: RolesTableProps) {
+  const { t } = useLocale();
   const isEmpty = roles.length === 0;
   const emptyMessage =
     totalCount === 0
-      ? "Ще немає ролей. Натисніть кнопку «+», щоб додати першу роль."
-      : "За пошуком нічого не знайдено.";
+      ? t("roles.emptyCreate")
+      : t("common.emptySearch");
 
   const isSystemAdmin = (role: ApiRoleListItem) => role.id === ADMIN_SYSTEM_ROLE_ID;
   return (
@@ -40,11 +38,11 @@ export function RolesTable({
       <Table className="w-full table-fixed">
         <TableHeader>
           <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead className="h-11 px-3 text-left align-middle">Назва</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">Код</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle hidden md:table-cell">Опис</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">Дата створення</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle w-24">Прав</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("roles.name")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("roles.code")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle hidden md:table-cell">{t("roles.description")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("roles.createdAt")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle w-24">{t("roles.permissionsCount")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -79,10 +77,10 @@ export function RolesTable({
                   {role.description ?? "—"}
                 </TableCell>
                 <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-xs">
-                  {isSystemAdmin(role) ? "—" : formatDate(role.createdAt)}
+                  {isSystemAdmin(role) ? "—" : formatDateForDisplay(role.createdAt)}
                 </TableCell>
                 <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm tabular-nums">
-                  {isSystemAdmin(role) ? "усі" : role.permissionsCount}
+                  {isSystemAdmin(role) ? t("roles.allPermissions") : role.permissionsCount}
                 </TableCell>
               </TableRow>
             ))

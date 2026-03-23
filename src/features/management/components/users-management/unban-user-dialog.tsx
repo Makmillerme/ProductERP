@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { useLocale } from "@/lib/locale-provider";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -29,6 +30,7 @@ export function UnbanUserDialog({
   user,
   onSuccess,
 }: UnbanUserDialogProps) {
+  const { t, tFormat } = useLocale();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +43,7 @@ export function UnbanUserDialog({
         userId: user.id,
       });
       if (res.error) {
-        const msg = res.error.message ?? "Помилка розблокування.";
+        const msg = res.error.message ?? t("errors.unbanFailed");
         setError(msg);
         toast.error(msg);
         return;
@@ -49,7 +51,7 @@ export function UnbanUserDialog({
       onSuccess();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Помилка розблокування.");
+      setError(err instanceof Error ? err.message : t("errors.unbanFailed"));
     } finally {
       setLoading(false);
     }
@@ -61,9 +63,9 @@ export function UnbanUserDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Розблокувати користувача</AlertDialogTitle>
+          <AlertDialogTitle>{t("usersUnban.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            Користувач {user.email} знову зможе увійти в систему.
+            {tFormat("usersUnban.description", { email: user.email })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && (
@@ -72,9 +74,9 @@ export function UnbanUserDialog({
           </AlertDialogBody>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>Скасувати</AlertDialogCancel>
+          <AlertDialogCancel disabled={loading}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
           <AlertDialogAction onClick={handleConfirm} disabled={loading}>
-            {loading ? "Розблокування…" : "Розблокувати"}
+            {loading ? t("usersUnban.actioning") : t("usersUnban.action")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { OWNER_ROLE } from "@/config/owner";
 import { ADMIN_ROLE } from "@/config/roles";
 import { prisma } from "@/lib/prisma";
-import { slugify } from "@/lib/slugify";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +37,7 @@ export async function POST(request: Request) {
 
   const created: string[] = [];
   const existing: string[] = [];
-  const types: { id: string; name: string; code: string }[] = [];
+  const types: { id: string; name: string }[] = [];
 
   for (const rawName of body.types) {
     const name = rawName?.trim();
@@ -47,7 +46,7 @@ export async function POST(request: Request) {
     try {
       const found = await prisma.productType.findFirst({
         where: { name: { equals: name, mode: "insensitive" } },
-        select: { id: true, name: true, code: true },
+        select: { id: true, name: true },
       });
 
       if (found) {
@@ -56,13 +55,9 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const code = slugify(name) || `type-${Date.now()}`;
-      const codeExists = await prisma.productType.findUnique({ where: { code } });
-      const finalCode = codeExists ? `${code}-${Date.now()}` : code;
-
       const newType = await prisma.productType.create({
-        data: { name, code: finalCode, isAutoDetected: true },
-        select: { id: true, name: true, code: true },
+        data: { name, isAutoDetected: true },
+        select: { id: true, name: true },
       });
 
       created.push(name);

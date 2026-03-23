@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { OWNER_ROLE } from "@/config/owner";
 import { ADMIN_ROLE } from "@/config/roles";
 import { prisma } from "@/lib/prisma";
+import { SYSTEM_TAB_CONFIG } from "@/config/system-tab";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,6 @@ export async function POST(request: Request) {
 
   let body: {
     name?: string;
-    code?: string;
     description?: string;
     icon?: string;
     order?: number;
@@ -52,28 +52,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  if (!body.name?.trim() || !body.code?.trim()) {
-    return NextResponse.json({ error: "name and code are required" }, { status: 400 });
+  const name = body.name?.trim();
+  if (!name) {
+    return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
   try {
-    const existing = await prisma.category.findUnique({
-      where: { code: body.code.trim() },
+    const category = await prisma.$transaction(async (tx) => {
+      const cat = await tx.category.create({
+        data: {
+          name,
+          description: body.description?.trim() ?? null,
+          icon: body.icon?.trim() ?? null,
+          order: body.order ?? 0,
+        },
+      });
+      await tx.tabDefinition.create({
+        data: {
+          categoryId: cat.id,
+          name: SYSTEM_TAB_CONFIG.dbName,
+          order: SYSTEM_TAB_CONFIG.order,
+          isSystem: SYSTEM_TAB_CONFIG.isSystem,
+        },
+      });
+      return cat;
     });
-    if (existing) {
-      return NextResponse.json({ error: "Code already exists" }, { status: 409 });
-    }
-
-    const created = await prisma.category.create({
-      data: {
-        name: body.name.trim(),
-        code: body.code.trim(),
-        description: body.description?.trim() ?? null,
-        icon: body.icon?.trim() ?? null,
-        order: body.order ?? 0,
-      },
-    });
-    return NextResponse.json(created, { status: 201 });
+    return NextResponse.json(category, { status: 201 });
   } catch (e) {
     console.error("[POST /api/admin/categories]", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

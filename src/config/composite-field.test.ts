@@ -25,6 +25,7 @@ describe("parseCompositePresetValues", () => {
     const json = '{"layout":"column","subFields":[{"code":"a","label":"A","widgetType":"text_input","dataType":"string"}]}';
     const result = parseCompositePresetValues(json);
     expect(result.layout).toBe("column");
+    expect(result.hideLabel).toBe(false);
     expect(result.subFields).toHaveLength(1);
     expect(result.subFields[0]).toEqual({
       code: "a",
@@ -32,6 +33,12 @@ describe("parseCompositePresetValues", () => {
       widgetType: "text_input",
       dataType: "string",
     });
+  });
+
+  it("parses hideLabel", () => {
+    const json = '{"layout":"row","hideLabel":true,"subFields":[{"code":"x","label":"X","widgetType":"text_input","dataType":"string"}]}';
+    const result = parseCompositePresetValues(json);
+    expect(result.hideLabel).toBe(true);
   });
 
   it("filters invalid subField items", () => {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { useLocale } from "@/lib/locale-provider";
 import {
   Sheet,
   SheetContent,
@@ -44,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { ADMIN_ROLE, getRoleLabel, type RoleCode } from "@/config/roles";
 import { authClient } from "@/lib/auth-client";
 import type { AdminUser } from "./types";
+import { formatDateTimeForDisplay } from "@/features/products/lib/field-utils";
 
 export type RoleOption = { code: string; name: string };
 
@@ -74,11 +76,6 @@ export type UserDetailSheetProps = {
   onTransferSuccess?: () => void;
 };
 
-function formatDate(s: string): string {
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? s : d.toLocaleString("uk-UA", { dateStyle: "short", timeStyle: "short" });
-}
-
 function shortenUserAgent(ua: string | null | undefined): string {
   if (!ua) return "—";
   return ua.length <= 50 ? ua : ua.slice(0, 47) + "…";
@@ -99,6 +96,7 @@ export function UserDetailSheet({
   onRequestDelete,
   onTransferSuccess,
 }: UserDetailSheetProps) {
+  const { t, tFormat } = useLocale();
   const [activeTab, setActiveTab] = useState<"profile" | "sessions">(initialTab);
   const [name, setName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -154,7 +152,7 @@ export function UserDetailSheet({
       .then((res) => {
         if (cancelled) return;
         if (res.error) {
-          setSessionsError(res.error.message ?? "Помилка завантаження сесій.");
+          setSessionsError(res.error.message ?? t("errors.sessionsLoadFailed"));
           setSessions([]);
           return;
         }
@@ -167,7 +165,7 @@ export function UserDetailSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, user]);
+  }, [open, user, t]);
 
   const targetIsOwner = (user?.role as string) === "owner";
   const canChangeRole =
@@ -181,11 +179,11 @@ export function UserDetailSheet({
       const trimmedEmail = email.trim();
       const trimmedName = name.trim();
       if (!trimmedEmail || !trimmedName) {
-        setError("Заповніть email та ім'я.");
+        setError(t("users.fillEmailAndName"));
         return;
       }
       if (createPassword.length < MIN_PASSWORD_LENGTH) {
-        setError(`Пароль має бути не коротшим за ${MIN_PASSWORD_LENGTH} символів.`);
+        setError(tFormat("users.passwordMinLength", { n: String(MIN_PASSWORD_LENGTH) }));
         return;
       }
       setSaving(true);
@@ -203,14 +201,14 @@ export function UserDetailSheet({
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setError(data?.error ?? "Помилка створення користувача.");
+          setError(data?.error ?? t("errors.createFailed"));
           toast.error(data?.error);
           return;
         }
         onSuccess(true);
         onOpenChange(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Помилка створення.");
+        setError(err instanceof Error ? err.message : t("errors.createFailed"));
       } finally {
         setSaving(false);
       }
@@ -220,17 +218,17 @@ export function UserDetailSheet({
     if (!user) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
-      setError("Вкажіть ім'я.");
+      setError(t("users.nameRequired"));
       return;
     }
     const wantPassword = password.length > 0 || repeatPassword.length > 0;
     if (wantPassword) {
       if (password.length < MIN_PASSWORD_LENGTH) {
-        setError(`Пароль має бути не коротшим за ${MIN_PASSWORD_LENGTH} символів.`);
+        setError(tFormat("users.passwordMinLength", { n: String(MIN_PASSWORD_LENGTH) }));
         return;
       }
       if (password !== repeatPassword) {
-        setError("Паролі не збігаються.");
+        setError(t("users.passwordsMismatch"));
         return;
       }
     }
@@ -241,7 +239,7 @@ export function UserDetailSheet({
         data: { name: trimmedName, ...(lastName.trim() && { lastName: lastName.trim() }) },
       });
       if (updateRes.error) {
-        setError(updateRes.error.message ?? "Помилка оновлення.");
+        setError(updateRes.error.message ?? t("errors.saveFailed"));
         toast.error(updateRes.error.message);
         return;
       }
@@ -253,7 +251,7 @@ export function UserDetailSheet({
         });
         const roleData = await roleRes.json().catch(() => ({}));
         if (!roleRes.ok) {
-          setError(roleData?.error ?? "Помилка зміни ролі.");
+          setError(roleData?.error ?? t("users.roleChangeFailed"));
           toast.error(roleData?.error);
           return;
         }
@@ -264,7 +262,7 @@ export function UserDetailSheet({
           newPassword: password,
         });
         if (pwdRes.error) {
-          setError(pwdRes.error.message ?? "Помилка зміни пароля.");
+          setError(pwdRes.error.message ?? t("users.passwordChangeFailed"));
           toast.error(pwdRes.error.message);
           return;
         }
@@ -272,7 +270,7 @@ export function UserDetailSheet({
       onSuccess(false);
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Помилка оновлення.");
+      setError(err instanceof Error ? err.message : t("errors.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -284,7 +282,7 @@ export function UserDetailSheet({
     try {
       const res = await authClient.admin.revokeUserSession({ sessionToken });
       if (res.error) {
-        setSessionsError(res.error.message ?? "Помилка відкликання.");
+        setSessionsError(res.error.message ?? t("errors.revokeFailed"));
         return;
       }
       setSessions((prev) => prev.filter((s) => s.token !== sessionToken));
@@ -300,7 +298,7 @@ export function UserDetailSheet({
     try {
       const res = await authClient.admin.revokeUserSessions({ userId: user.id });
       if (res.error) {
-        setSessionsError(res.error.message ?? "Помилка відкликання.");
+        setSessionsError(res.error.message ?? t("errors.revokeFailed"));
         return;
       }
       setSessions([]);
@@ -321,13 +319,13 @@ export function UserDetailSheet({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data?.error ?? "Помилка передачі прав.");
+        toast.error(data?.error ?? t("errors.transferFailed"));
         return;
       }
       onTransferSuccess?.();
       onOpenChange(false);
       setTransferDialogOpen(false);
-      toast.success("Права власника передано. Ви тепер адмін.");
+      toast.success(t("toasts.ownerTransferred"));
     } finally {
       setTransferLoading(false);
     }
@@ -336,7 +334,7 @@ export function UserDetailSheet({
   const canTransferOwnership =
     isOwner && !isCreate && user && currentUserId !== user.id && !targetIsOwner;
 
-  const title = isCreate ? "Додати користувача" : user?.name ? `${user.name}${user.lastName ? ` ${user.lastName}` : ""}` : user?.email ?? "Користувач";
+  const title = isCreate ? t("users.addUserTitle") : user?.name ? `${user.name}${user.lastName ? ` ${user.lastName}` : ""}` : user?.email ?? t("users.userLabel");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -357,11 +355,11 @@ export function UserDetailSheet({
           >
             <ScrollableTabsList variant="line">
               <TabsTrigger value="profile" className="flex-1 min-w-0 shrink-0 text-xs sm:text-sm">
-                Профіль
+                {t("users.profile")}
               </TabsTrigger>
               {!isCreate && (
                 <TabsTrigger value="sessions" className="flex-1 min-w-0 shrink-0 text-xs sm:text-sm">
-                  Сесії
+                  {t("users.sessions")}
                 </TabsTrigger>
               )}
             </ScrollableTabsList>
@@ -371,26 +369,26 @@ export function UserDetailSheet({
                 {isCreate ? (
                   <>
                     <div className="grid gap-2">
-                      <Label htmlFor="sheet-user-email">Email</Label>
+                      <Label htmlFor="sheet-user-email">{t("users.email")}</Label>
                       <Input
                         id="sheet-user-email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="user@example.com"
+                        placeholder={t("users.emailPlaceholder")}
                         autoComplete="email"
                         disabled={saving}
                         className={SHEET_INPUT_CLASS}
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="sheet-user-create-password">Пароль</Label>
+                      <Label htmlFor="sheet-user-create-password">{t("users.password")}</Label>
                       <Input
                         id="sheet-user-create-password"
                         type="password"
                         value={createPassword}
                         onChange={(e) => setCreatePassword(e.target.value)}
-                        placeholder={`Мінімум ${MIN_PASSWORD_LENGTH} символів`}
+                        placeholder={tFormat("users.minPasswordPlaceholder", { n: String(MIN_PASSWORD_LENGTH) })}
                         autoComplete="new-password"
                         disabled={saving}
                         className={SHEET_INPUT_CLASS}
@@ -399,34 +397,34 @@ export function UserDetailSheet({
                   </>
                 ) : (
                   <div className="grid gap-2">
-                    <Label>Email</Label>
+                    <Label>{t("users.email")}</Label>
                     <p className="text-sm text-muted-foreground">{user?.email}</p>
                   </div>
                 )}
                 <div className="grid gap-2">
-                  <Label htmlFor="sheet-user-name">Ім&apos;я</Label>
+                  <Label htmlFor="sheet-user-name">{t("users.name")}</Label>
                   <Input
                     id="sheet-user-name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Ім'я"
+                    placeholder={t("users.namePlaceholder")}
                     disabled={saving}
                     className={SHEET_INPUT_CLASS}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="sheet-user-lastName">Прізвище</Label>
+                  <Label htmlFor="sheet-user-lastName">{t("users.lastName")}</Label>
                   <Input
                     id="sheet-user-lastName"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Прізвище (необовʼязково)"
+                    placeholder={t("users.lastNamePlaceholder")}
                     disabled={saving}
                     className={SHEET_INPUT_CLASS}
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="sheet-user-role">Роль</Label>
+                  <Label htmlFor="sheet-user-role">{t("users.role")}</Label>
                   {canChangeRole ? (
                     <>
                       <Select
@@ -447,8 +445,8 @@ export function UserDetailSheet({
                       </Select>
                       <p className="text-xs text-muted-foreground">
                         {isOwner
-                          ? "Власник може призначати або знімати права адміна."
-                          : "Можна змінювати ролі лише користувачів без прав адміна. Призначити адміна може лише власник."}
+                          ? t("users.ownerCanAssignAdmin")
+                          : t("users.onlyOwnerCanAssignAdmin")}
                       </p>
                     </>
                     ) : (
@@ -458,8 +456,8 @@ export function UserDetailSheet({
                         </p>
                         {currentUserId === user?.id && (
                           <p className="text-xs text-muted-foreground">
-                            Роль власного облікового запису змінити не можна.
-                            {!isOwner && " Призначити адміна може лише власник системи."}
+                            {t("users.ownRoleCannotChange")}
+                            {!isOwner && ` ${t("users.onlyOwnerCanAssignAdminSuffix")}`}
                           </p>
                         )}
                       </>
@@ -467,13 +465,13 @@ export function UserDetailSheet({
                 </div>
                 {!isCreate && (
                   <div className="grid gap-2 pt-2 border-t">
-                    <Label className="text-muted-foreground">Змінити пароль (необовʼязково)</Label>
+                    <Label className="text-muted-foreground">{t("users.changePassword")}</Label>
                     <Input
                       id="sheet-user-password"
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder={`Мінімум ${MIN_PASSWORD_LENGTH} символів`}
+                      placeholder={tFormat("users.minPasswordPlaceholder", { n: String(MIN_PASSWORD_LENGTH) })}
                       autoComplete="new-password"
                       disabled={saving}
                       className={SHEET_INPUT_CLASS}
@@ -483,7 +481,7 @@ export function UserDetailSheet({
                       type="password"
                       value={repeatPassword}
                       onChange={(e) => setRepeatPassword(e.target.value)}
-                      placeholder="Повторити пароль"
+                      placeholder={t("users.repeatPassword")}
                       autoComplete="new-password"
                       disabled={saving}
                       className={SHEET_INPUT_CLASS}
@@ -502,29 +500,29 @@ export function UserDetailSheet({
                     <p className="text-sm text-destructive">{sessionsError}</p>
                   )}
                   {sessionsLoading ? (
-                    <p className="text-sm text-muted-foreground">Завантаження…</p>
+                    <p className="text-sm text-muted-foreground">{t("users.loading")}</p>
                   ) : sessions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Немає активних сесій.</p>
+                    <p className="text-sm text-muted-foreground">{t("users.noSessions")}</p>
                   ) : (
                     <div className={cn("min-h-0 min-w-0 flex-1 rounded-md border", SHEET_SCROLL_CLASS)}>
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-muted/50 hover:bg-muted/50">
-                            <TableHead className="h-11 px-3 text-left align-middle whitespace-nowrap text-xs">Створено</TableHead>
-                            <TableHead className="h-11 px-3 text-left align-middle whitespace-nowrap text-xs">Закінчується</TableHead>
-                            <TableHead className="h-11 px-3 text-left align-middle text-xs">IP</TableHead>
-                            <TableHead className="h-11 px-3 text-left align-middle min-w-[100px] text-xs">User-Agent</TableHead>
-                            <TableHead className="h-11 px-3 text-left align-middle w-[90px] shrink-0 text-xs">Дії</TableHead>
+                            <TableHead className="h-11 px-3 text-left align-middle whitespace-nowrap text-xs">{t("users.createdAt")}</TableHead>
+                            <TableHead className="h-11 px-3 text-left align-middle whitespace-nowrap text-xs">{t("users.expiresAt")}</TableHead>
+                            <TableHead className="h-11 px-3 text-left align-middle text-xs">{t("users.ip")}</TableHead>
+                            <TableHead className="h-11 px-3 text-left align-middle min-w-[100px] text-xs">{t("users.userAgent")}</TableHead>
+                            <TableHead className="h-11 px-3 text-left align-middle w-[90px] shrink-0 text-xs">{t("users.actions")}</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {sessions.map((s) => (
                             <TableRow key={s.id}>
                               <TableCell className="h-11 px-3 text-left align-middle text-xs whitespace-nowrap">
-                                {formatDate(s.createdAt)}
+                                {formatDateTimeForDisplay(s.createdAt)}
                               </TableCell>
                               <TableCell className="h-11 px-3 text-left align-middle text-xs whitespace-nowrap">
-                                {formatDate(s.expiresAt)}
+                                {formatDateTimeForDisplay(s.expiresAt)}
                               </TableCell>
                               <TableCell className="h-11 px-3 text-left align-middle text-xs">
                                 {s.ipAddress ?? "—"}
@@ -540,7 +538,7 @@ export function UserDetailSheet({
                                   onClick={() => handleRevokeOne(s.token)}
                                   disabled={revoking !== null}
                                 >
-                                  {revoking === s.token ? "…" : "Відкликати"}
+                                  {revoking === s.token ? t("users.revoking") : t("users.revoke")}
                                 </Button>
                               </TableCell>
                             </TableRow>
@@ -556,7 +554,7 @@ export function UserDetailSheet({
                       onClick={handleRevokeAll}
                       disabled={revoking !== null}
                     >
-                      {revoking === "all" ? "Відкликання…" : "Відкликати всі сесії"}
+                      {revoking === "all" ? t("users.revoking") : t("users.revokeAll")}
                     </Button>
                   )}
                 </div>
@@ -575,7 +573,7 @@ export function UserDetailSheet({
                 onClick={() => setTransferDialogOpen(true)}
                 disabled={saving}
               >
-                Передати права власника
+                {t("users.transferOwner")}
               </Button>
             </div>
           )}
@@ -590,7 +588,7 @@ export function UserDetailSheet({
                     onClick={() => onRequestUnban(user)}
                     disabled={saving}
                   >
-                    Розблокувати
+                    {t("users.unban")}
                   </Button>
                 ) : (
                   <Button
@@ -600,7 +598,7 @@ export function UserDetailSheet({
                     onClick={() => onRequestBan(user)}
                     disabled={saving}
                   >
-                    Заблокувати
+                    {t("users.ban")}
                   </Button>
                 )}
                 <Button
@@ -610,7 +608,7 @@ export function UserDetailSheet({
                   onClick={() => onRequestDelete(user)}
                   disabled={saving}
                 >
-                  Видалити
+                  {t("users.delete")}
                 </Button>
               </>
             )}
@@ -619,7 +617,7 @@ export function UserDetailSheet({
               disabled={saving}
               className="ml-auto"
             >
-              {saving ? (isCreate ? "Створення…" : "Збереження…") : isCreate ? "Створити" : "Зберегти"}
+              {saving ? (isCreate ? t("users.creating") : t("users.saving")) : isCreate ? t("productsConfig.common.create") : t("productsConfig.common.save")}
             </Button>
           </div>
         </SheetFooter>
@@ -628,13 +626,13 @@ export function UserDetailSheet({
         <AlertDialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Передати права власника</AlertDialogTitle>
+              <AlertDialogTitle>{t("users.transferOwnerTitle")}</AlertDialogTitle>
               <AlertDialogDescription>
-                Користувач {user.email} стане єдиним власником системи. Ви автоматично отримаєте роль адміна і перестанете бути власником. Цю дію не можна скасувати.
+                {tFormat("users.transferOwnerDesc", { email: user.email })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={transferLoading}>Скасувати</AlertDialogCancel>
+              <AlertDialogCancel disabled={transferLoading}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={(e) => {
                   e.preventDefault();
@@ -642,7 +640,7 @@ export function UserDetailSheet({
                 }}
                 disabled={transferLoading}
               >
-                {transferLoading ? "Передача…" : "Передати"}
+                {transferLoading ? t("users.transferring") : t("users.transfer")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

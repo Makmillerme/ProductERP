@@ -1,0 +1,1 @@
+Statuses table: fixed layout when empty. (1) colSpan corrected 6→5. (2) Added colgroup for proper column distribution: w-16, width:1% (Name), w-24, w-36, min-w-[8rem]. (3) Color column header now visible (was sr-only) with w-16. Prevents headers bunching and empty gray space on right.

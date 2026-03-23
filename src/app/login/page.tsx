@@ -6,8 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { useLocale } from "@/lib/locale-provider";
+
+function LoginPageFallback() {
+  const { t } = useLocale();
+  return <div className="text-muted-foreground">{t("auth.loadingFallback")}</div>;
+}
 
 function LoginForm() {
+  const { t } = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
@@ -28,7 +35,7 @@ function LoginForm() {
     });
     if (res.error) {
       setStatus("error");
-      setErrorMessage(res.error.message ?? "Невірний email або пароль.");
+      setErrorMessage(res.error.message ?? t("auth.invalidCredentials"));
       return;
     }
     router.push(callbackUrl);
@@ -39,15 +46,15 @@ function LoginForm() {
     <div className="w-full max-w-sm space-y-6">
       <div className="text-center">
         <h1 className="text-2xl font-semibold tracking-tight">VMD Parser</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Вхід у застосунок</p>
+        <p className="mt-1 text-sm text-muted-foreground">{t("auth.loginTitle")}</p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="login-email">Email</Label>
+          <Label htmlFor="login-email">{t("auth.email")}</Label>
           <Input
             id="login-email"
             type="email"
-            placeholder="you@example.com"
+            placeholder={t("auth.emailPlaceholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -57,7 +64,7 @@ function LoginForm() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="login-password">Пароль</Label>
+          <Label htmlFor="login-password">{t("auth.password")}</Label>
           <Input
             id="login-password"
             type="password"
@@ -72,7 +79,7 @@ function LoginForm() {
           <p className="text-sm text-destructive">{errorMessage}</p>
         )}
         <Button type="submit" className="w-full" disabled={status === "loading"}>
-          {status === "loading" ? "Вхід…" : "Увійти"}
+          {status === "loading" ? t("auth.loading") : t("auth.signIn")}
         </Button>
       </form>
     </div>
@@ -82,7 +89,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <Suspense fallback={<div className="text-muted-foreground">Завантаження…</div>}>
+        <Suspense fallback={<LoginPageFallback />}>
         <LoginForm />
       </Suspense>
     </div>

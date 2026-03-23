@@ -1,0 +1,1 @@
+Turbopack HMR JSON fix: created src/config/locales/index.ts that uses require("./uk.json") and require("./en.json") instead of ESM import. i18n.ts now imports { uk, en } from @/config/locales. This avoids "Expected module to match pattern" error with direct JSON imports.

@@ -2,6 +2,7 @@
 
 import { useQueryState } from "nuqs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useLocale } from "@/lib/locale-provider";
 import { UsersManagement } from "./users-management";
 import { RolesManagement } from "./roles-management";
 
@@ -9,6 +10,7 @@ const USER_TABS = ["users", "roles"] as const;
 type UserTab = (typeof USER_TABS)[number];
 
 export function UsersPage() {
+  const { t } = useLocale();
   const [tab, setTab] = useQueryState("tab", {
     defaultValue: "users" as UserTab,
     parse: (v) =>
@@ -24,10 +26,10 @@ export function UsersPage() {
     >
       <TabsList variant="line" className="w-full shrink-0 max-w-xs">
         <TabsTrigger value="users" className="min-w-0 text-xs sm:text-sm">
-          Користувачі
+          {t("management.tabs.usersTab")}
         </TabsTrigger>
         <TabsTrigger value="roles" className="min-w-0 text-xs sm:text-sm">
-          Ролі
+          {t("management.tabs.rolesTab")}
         </TabsTrigger>
       </TabsList>
 

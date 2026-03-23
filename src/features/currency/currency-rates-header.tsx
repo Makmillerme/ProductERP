@@ -1,6 +1,7 @@
 "use client";
 
 import { TrendingDown, TrendingUp } from "lucide-react";
+import { useLocale } from "@/lib/locale-provider";
 import { useGoverlaRates } from "./use-rates";
 import type { GoverlaCurrency } from "./api";
 
@@ -22,14 +23,15 @@ function formatRelative(raw: number): string {
 
 /** Як на Говерлі: зростання — зелений ↑, падіння — червоний ↓ + значення зміни */
 function TrendIndicator({ relative }: { relative: number | null }) {
+  const { t, tFormat } = useLocale();
   if (relative == null || relative === 0) return null;
   const isUp = relative > 0;
   const value = formatRelative(relative);
   return (
     <span
       className="inline-flex items-center gap-0.5 tabular-nums"
-      title={isUp ? "Курс зріс" : "Курс впав"}
-      aria-label={isUp ? `Курс зріс на ${value}` : `Курс впав на ${value}`}
+      title={isUp ? t("currency.rateUp") : t("currency.rateDown")}
+      aria-label={isUp ? tFormat("currency.rateUpBy", { value }) : tFormat("currency.rateDownBy", { value })}
     >
       {isUp ? (
         <>
@@ -59,13 +61,14 @@ function filterUsdEur(rates: GoverlaCurrency[]): GoverlaCurrency[] {
 }
 
 export function CurrencyRatesHeader() {
+  const { t } = useLocale();
   const { data, isLoading, isError } = useGoverlaRates();
   const rates = filterUsdEur(data?.rates ?? []);
 
   if (isLoading) {
     return (
       <span className="shrink-0 text-xs text-emerald-500 dark:text-emerald-400" aria-hidden>
-        Курси…
+        {t("currency.loading")}
       </span>
     );
   }

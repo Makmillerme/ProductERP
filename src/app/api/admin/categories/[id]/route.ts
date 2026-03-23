@@ -52,7 +52,6 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   let body: {
     name?: string;
-    code?: string;
     description?: string;
     icon?: string;
     order?: number;
@@ -69,20 +68,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (body.code?.trim()) {
-      const dup = await prisma.category.findFirst({
-        where: { code: body.code.trim(), NOT: { id } },
-      });
-      if (dup) {
-        return NextResponse.json({ error: "Code already exists" }, { status: 409 });
-      }
-    }
-
     const updated = await prisma.category.update({
       where: { id },
       data: {
         ...(body.name !== undefined && { name: body.name.trim() }),
-        ...(body.code !== undefined && { code: body.code!.trim() }),
         ...(body.description !== undefined && { description: body.description?.trim() ?? null }),
         ...(body.icon !== undefined && { icon: body.icon?.trim() ?? null }),
         ...(body.order !== undefined && { order: body.order }),

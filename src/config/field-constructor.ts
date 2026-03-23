@@ -6,31 +6,31 @@
 
 /** Типи даних — тільки для полів, де це має сенс */
 export const DATA_TYPES = [
-  { value: "string", label: "Текст" },
-  { value: "integer", label: "Ціле число" },
-  { value: "float", label: "Дробне число" },
-  { value: "boolean", label: "Так/Ні" },
-  { value: "date", label: "Дата" },
-  { value: "datetime", label: "Дата і час" },
-  { value: "media", label: "Медіа" },
-  { value: "file", label: "Файл" },
+  { value: "string", labelKey: "dataTypes.string" },
+  { value: "integer", labelKey: "dataTypes.integer" },
+  { value: "float", labelKey: "dataTypes.float" },
+  { value: "boolean", labelKey: "dataTypes.boolean" },
+  { value: "date", labelKey: "dataTypes.date" },
+  { value: "datetime", labelKey: "dataTypes.datetime" },
+  { value: "media", labelKey: "dataTypes.media" },
+  { value: "file", labelKey: "dataTypes.file" },
 ] as const;
 
 export type DataType = (typeof DATA_TYPES)[number]["value"];
 
 /** Способи відображення (віджети) — тип даних підбирається автоматично */
 export const WIDGET_TYPES = [
-  { value: "text_input", label: "Текстовий рядок", dataTypes: ["string"] as DataType[] },
-  { value: "number_input", label: "Числовий рядок", dataTypes: ["integer", "float"] as DataType[] },
-  { value: "textarea", label: "Текстове поле", dataTypes: ["string"] as DataType[] },
-  { value: "select", label: "Спадний список", dataTypes: ["string", "integer", "float", "boolean"] as DataType[] },
-  { value: "multiselect", label: "Чекбокс", dataTypes: ["string", "integer", "float", "boolean"] as DataType[] },
-  { value: "radio", label: "Вибір одного", dataTypes: ["string", "integer", "float", "boolean"] as DataType[] },
-  { value: "calculated", label: "Формула", dataTypes: ["integer", "float"] as DataType[] },
-  { value: "media_gallery", label: "Галерея", dataTypes: ["media"] as DataType[] },
-  { value: "file_upload", label: "Файли", dataTypes: ["file"] as DataType[] },
-  { value: "datepicker", label: "Дата", dataTypes: ["date", "datetime"] as DataType[] },
-  { value: "composite", label: "Складене поле", dataTypes: [] as DataType[] },
+  { value: "text_input", labelKey: "widgetTypes.text_input", dataTypes: ["string"] as DataType[] },
+  { value: "number_input", labelKey: "widgetTypes.number_input", dataTypes: ["integer", "float"] as DataType[] },
+  { value: "textarea", labelKey: "widgetTypes.textarea", dataTypes: ["string"] as DataType[] },
+  { value: "select", labelKey: "widgetTypes.select", dataTypes: ["string", "integer", "float", "boolean"] as DataType[] },
+  { value: "multiselect", labelKey: "widgetTypes.multiselect", dataTypes: ["string", "integer", "float", "boolean"] as DataType[] },
+  { value: "radio", labelKey: "widgetTypes.radio", dataTypes: ["string", "integer", "float", "boolean"] as DataType[] },
+  { value: "calculated", labelKey: "widgetTypes.calculated", dataTypes: ["integer", "float"] as DataType[] },
+  { value: "media_gallery", labelKey: "widgetTypes.media_gallery", dataTypes: ["media"] as DataType[] },
+  { value: "file_upload", labelKey: "widgetTypes.file_upload", dataTypes: ["file"] as DataType[] },
+  { value: "datepicker", labelKey: "widgetTypes.datepicker", dataTypes: ["date", "datetime"] as DataType[] },
+  { value: "composite", labelKey: "widgetTypes.composite", dataTypes: [] as DataType[] },
 ] as const;
 
 export type WidgetType = (typeof WIDGET_TYPES)[number]["value"];
@@ -41,15 +41,17 @@ export const WIDGETS_WITHOUT_DATA_TYPE: WidgetType[] = ["composite"];
 /** Віджети без стандартної валідації (формула, composite — окрема логіка) */
 export const WIDGETS_WITHOUT_VALIDATION: WidgetType[] = ["calculated", "composite"];
 
-/** Фіксовані опції для типу Так/Ні — лише true/false, Так/Ні */
+/** Фіксовані опції для типу Так/Ні. labelKey для i18n. */
 export const BOOLEAN_PRESET_OPTIONS = [
-  { value: "true", label: "Так" },
-  { value: "false", label: "Ні" },
+  { value: "true", labelKey: "fieldConstructor.booleanYes" },
+  { value: "false", labelKey: "fieldConstructor.booleanNo" },
 ] as const;
 
-export const BOOLEAN_PRESET_VALUES_JSON = JSON.stringify(
-  BOOLEAN_PRESET_OPTIONS.map((o) => ({ value: o.value, label: o.label }))
-);
+/** JSON для presetValues boolean — лише value, label резолвиться через t() при відображенні */
+export const BOOLEAN_PRESET_VALUES_JSON = JSON.stringify([
+  { value: "true" },
+  { value: "false" },
+]);
 
 /** Віджети без defaultValue (опції визначають вибір, формула обчислює, або не має сенсу) */
 export const WIDGETS_WITHOUT_DEFAULT_VALUE: WidgetType[] = [
@@ -82,14 +84,14 @@ export const WIDGETS_WITH_PLACEHOLDER: WidgetType[] = [
   "select",
 ];
 
-/** Пресети формату для текстового рядка (TextInput). Текстове поле (Textarea) не використовує. */
+/** Пресети формату для текстового рядка (TextInput). labelKey для i18n. */
 export const TEXT_FORMAT_PRESETS = [
-  { value: "any", label: "Будь-який текст", pattern: "" },
-  { value: "email", label: "Email", pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" },
-  { value: "url", label: "URL", pattern: "^https?://[^\\s]+$" },
-  { value: "phone", label: "Телефон", pattern: "^[+]?[\\d\\s\\-()]{10,}$" },
-  { value: "slug", label: "Slug", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-  { value: "custom", label: "Власний regex", pattern: "" },
+  { value: "any", labelKey: "fieldConstructor.textFormatAny", pattern: "" },
+  { value: "email", labelKey: "fieldConstructor.textFormatEmail", pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" },
+  { value: "url", labelKey: "fieldConstructor.textFormatUrl", pattern: "^https?://[^\\s]+$" },
+  { value: "phone", labelKey: "fieldConstructor.textFormatPhone", pattern: "^[+]?[\\d\\s\\-()]{10,}$" },
+  { value: "slug", labelKey: "fieldConstructor.textFormatSlug", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+  { value: "custom", labelKey: "fieldConstructor.textFormatCustom", pattern: "" },
 ] as const;
 
 export type TextFormatPreset = (typeof TEXT_FORMAT_PRESETS)[number]["value"];
@@ -104,11 +106,11 @@ export function getTextValidationPattern(
   return preset?.pattern || undefined;
 }
 
-/** Одиниці розміру файлу для UI */
+/** Одиниці розміру файлу для UI. labelKey для i18n. */
 export const FILE_SIZE_UNITS = [
-  { value: "bytes", label: "байт", multiplier: 1 },
-  { value: "KB", label: "КБ", multiplier: 1024 },
-  { value: "MB", label: "МБ", multiplier: 1024 * 1024 },
+  { value: "bytes", labelKey: "fieldConstructor.fileSizeBytes", multiplier: 1 },
+  { value: "KB", labelKey: "fieldConstructor.fileSizeKB", multiplier: 1024 },
+  { value: "MB", labelKey: "fieldConstructor.fileSizeMB", multiplier: 1024 * 1024 },
 ] as const;
 
 export type FileSizeUnit = (typeof FILE_SIZE_UNITS)[number]["value"];
@@ -131,61 +133,61 @@ export function fileSizeDisplayToBytes(value: number, unit: FileSizeUnit): numbe
   return Math.round((u?.multiplier ?? 1024) * value);
 }
 
-/** Спрощені опції валідації — замість JSON для звичайного адміна */
+/** Спрощені опції валідації. labelKey, hintKey для i18n. */
 export type ValidationOption = {
   key: string;
-  label: string;
-  hint: string;
+  labelKey: string;
+  hintKey: string;
   inputType?: "number" | "text" | "checkbox" | "select" | "fileSize";
-  selectOptions?: { value: string; label: string }[];
+  selectOptions?: { value: string; labelKey: string }[];
 };
 
 export const VALIDATION_OPTIONS: Record<DataType, ValidationOption[]> = {
   string: [
-    { key: "required", label: "Обовʼязкове поле", hint: "Не можна залишити порожнім" },
-    { key: "minLength", label: "Мін. символів", hint: "Наприклад: 1", inputType: "number" },
-    { key: "maxLength", label: "Макс. символів", hint: "Наприклад: 255", inputType: "number" },
-    { key: "format", label: "Формат", hint: "Email, URL, телефон тощо", inputType: "select", selectOptions: TEXT_FORMAT_PRESETS.map((p) => ({ value: p.value, label: p.label })) },
-    { key: "pattern", label: "Regex", hint: "Наприклад: ^[A-Z0-9]+$", inputType: "text" },
-    { key: "patternMessage", label: "Повідомлення при помилці", hint: "Наприклад: Невірний формат email", inputType: "text" },
-    { key: "minRows", label: "Мін. висота (рядків)", hint: "Тільки для текстового поля", inputType: "number" },
-    { key: "maxRows", label: "Макс. висота (рядків)", hint: "Тільки для текстового поля", inputType: "number" },
+    { key: "required", labelKey: "validation.required", hintKey: "validation.requiredHint" },
+    { key: "minLength", labelKey: "validation.minLength", hintKey: "validation.minLengthHint", inputType: "number" },
+    { key: "maxLength", labelKey: "validation.maxLength", hintKey: "validation.maxLengthHint", inputType: "number" },
+    { key: "format", labelKey: "validation.format", hintKey: "validation.formatHint", inputType: "select", selectOptions: TEXT_FORMAT_PRESETS.map((p) => ({ value: p.value, labelKey: p.labelKey })) },
+    { key: "pattern", labelKey: "validation.pattern", hintKey: "validation.patternHint", inputType: "text" },
+    { key: "patternMessage", labelKey: "validation.patternMessage", hintKey: "validation.patternMessageHint", inputType: "text" },
+    { key: "minRows", labelKey: "validation.minRows", hintKey: "validation.minRowsHint", inputType: "number" },
+    { key: "maxRows", labelKey: "validation.maxRows", hintKey: "validation.minRowsHint", inputType: "number" },
   ],
   integer: [
-    { key: "required", label: "Обовʼязкове поле", hint: "Не можна залишити порожнім" },
-    { key: "min", label: "Мін. значення", hint: "Наприклад: 0", inputType: "number" },
-    { key: "max", label: "Макс. значення", hint: "Наприклад: 999999", inputType: "number" },
-    { key: "step", label: "Крок", hint: "Наприклад: 1 або 10", inputType: "number" },
+    { key: "required", labelKey: "validation.required", hintKey: "validation.requiredHint" },
+    { key: "min", labelKey: "validation.min", hintKey: "validation.minHint", inputType: "number" },
+    { key: "max", labelKey: "validation.max", hintKey: "validation.maxHint", inputType: "number" },
+    { key: "step", labelKey: "validation.step", hintKey: "validation.stepHint", inputType: "number" },
   ],
   float: [
-    { key: "required", label: "Обовʼязкове поле", hint: "Не можна залишити порожнім" },
-    { key: "min", label: "Мін. значення", hint: "Наприклад: 0", inputType: "number" },
-    { key: "max", label: "Макс. значення", hint: "Наприклад: 999999.99", inputType: "number" },
-    { key: "step", label: "Крок", hint: "Наприклад: 0.01 або 0.5", inputType: "number" },
-    { key: "decimalPlaces", label: "Знаків після коми", hint: "Наприклад: 2", inputType: "number" },
-    { key: "useThousandSeparator", label: "Роздільник тисяч", hint: "Пробіл між тисячами (1 234,56)", inputType: "checkbox" },
+    { key: "required", labelKey: "validation.required", hintKey: "validation.requiredHint" },
+    { key: "min", labelKey: "validation.min", hintKey: "validation.minHint", inputType: "number" },
+    { key: "max", labelKey: "validation.max", hintKey: "validation.maxHintFloat", inputType: "number" },
+    { key: "step", labelKey: "validation.step", hintKey: "validation.stepHintFloat", inputType: "number" },
+    { key: "decimalPlaces", labelKey: "validation.decimalPlaces", hintKey: "validation.decimalPlacesHint", inputType: "number" },
+    { key: "useThousandSeparator", labelKey: "validation.useThousandSeparator", hintKey: "validation.thousandSeparatorHint", inputType: "checkbox" },
   ],
   boolean: [
-    { key: "required", label: "Обовʼязкове поле", hint: "Не можна залишити порожнім" },
+    { key: "required", labelKey: "validation.required", hintKey: "validation.requiredHint" },
   ],
   date: [
-    { key: "required", label: "Обовʼязкове поле", hint: "Не можна залишити порожнім" },
+    { key: "required", labelKey: "validation.required", hintKey: "validation.requiredHint" },
   ],
   datetime: [
-    { key: "required", label: "Обовʼязкове поле", hint: "Не можна залишити порожнім" },
+    { key: "required", labelKey: "validation.required", hintKey: "validation.requiredHint" },
   ],
   media: [
-    { key: "maxFileSizeBytes", label: "Макс. розмір файлу", hint: "Вкажіть розмір файлу", inputType: "fileSize" },
+    { key: "maxFileSizeBytes", labelKey: "validation.maxFileSizeBytes", hintKey: "fieldConstructor.maxFileSizeHint", inputType: "fileSize" },
   ],
   file: [
-    { key: "maxFileSizeBytes", label: "Макс. розмір файлу", hint: "Вкажіть розмір файлу", inputType: "fileSize" },
+    { key: "maxFileSizeBytes", labelKey: "validation.maxFileSizeBytes", hintKey: "fieldConstructor.maxFileSizeHint", inputType: "fileSize" },
   ],
 };
 
-/** Шаблони полів — по типу відображення (widget), тип даних обирається з валідних для віджета */
+/** Шаблони полів — по типу відображення (widget). labelKey для i18n. */
 export const FIELD_TEMPLATES = WIDGET_TYPES.map((w) => ({
   id: w.value,
-  label: w.label,
+  labelKey: w.labelKey,
   widgetType: w.value as WidgetType,
   dataType: w.dataTypes[0] as DataType | null,
 }));

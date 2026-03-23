@@ -1,0 +1,3 @@
+При створенні товару з каталогу (кнопка +) ProductDetailSheet ініціалізував edit з EMPTY_EDIT (category_id: null, product_type_id: null). API listProducts фільтрує за categoryId: productTypeRef.categoryId === catId OR product.categoryId === catId. Товари з null не потрапляли в список.
+
+**Фікс:** Додано prop categoryId до ProductDetailSheet. При відкритті форми створення (product=null) ініціалізуємо edit з category_id та product_type_id з контексту. products-page передає categoryId={categoryId ?? null}.

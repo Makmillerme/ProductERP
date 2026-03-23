@@ -34,7 +34,10 @@ export async function GET(_request: Request, context: RouteContext) {
     const tabs = await prisma.tabDefinition.findMany({
       where: { categoryId },
       orderBy: { order: "asc" },
-      include: { _count: { select: { fields: true } } },
+      include: {
+        _count: { select: { fields: true } },
+        fields: { select: { fieldDefinitionId: true } },
+      },
     });
     return NextResponse.json(tabs);
   } catch (e) {
@@ -51,7 +54,6 @@ export async function POST(request: Request, context: RouteContext) {
 
   let body: {
     name?: string;
-    code?: string;
     icon?: string;
     tabConfig?: string;
     order?: number;
@@ -62,8 +64,8 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  if (!body.name?.trim() || !body.code?.trim()) {
-    return NextResponse.json({ error: "name and code are required" }, { status: 400 });
+  if (!body.name?.trim()) {
+    return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
   try {
@@ -72,21 +74,10 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
 
-    const existing = await prisma.tabDefinition.findUnique({
-      where: { categoryId_code: { categoryId, code: body.code.trim() } },
-    });
-    if (existing) {
-      return NextResponse.json(
-        { error: "Tab code already exists for this category" },
-        { status: 409 },
-      );
-    }
-
     const created = await prisma.tabDefinition.create({
       data: {
         categoryId,
         name: body.name.trim(),
-        code: body.code.trim(),
         icon: body.icon?.trim() ?? null,
         tabConfig: body.tabConfig ?? null,
         order: body.order ?? 0,

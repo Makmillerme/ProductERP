@@ -8,14 +8,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useLocale } from "@/lib/locale-provider";
 import { cn } from "@/lib/utils";
 import { getRoleLabel } from "@/config/roles";
 import type { AdminUser } from "./types";
-
-function formatDate(s: string): string {
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString("uk-UA", { dateStyle: "short" });
-}
+import { formatDateForDisplay } from "@/features/products/lib/field-utils";
 
 type UsersTableProps = {
   users: AdminUser[];
@@ -30,18 +27,19 @@ export function UsersTable({
   roleLabels,
   onRowClick,
 }: UsersTableProps) {
+  const { t } = useLocale();
   void currentUserId; // Reserved for highlighting current user row
   return (
     <div className="overflow-hidden">
       <Table className="w-full table-fixed">
         <TableHeader>
           <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead className="h-11 px-3 text-left align-middle">Email</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">Ім&apos;я</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">Прізвище</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">Роль</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">Статус</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">Дата реєстрації</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("users.email")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("users.name")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("users.lastName")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("users.role")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("users.status")}</TableHead>
+            <TableHead className="h-11 px-3 text-left align-middle">{t("users.registrationDate")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -54,7 +52,7 @@ export function UsersTable({
               >
                 <div className="flex min-h-[8rem] w-full flex-col items-center justify-center gap-2 py-10 text-center">
                   <p className="text-sm text-muted-foreground px-4">
-                    Немає користувачів за пошуком або ще не додано жодного.
+                    {t("users.emptySearch")}
                   </p>
                 </div>
               </TableCell>
@@ -81,16 +79,16 @@ export function UsersTable({
                 <TableCell className="h-11 px-3 text-left align-middle">
                   {user.banned === true ? (
                     <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-destructive/15 text-destructive")}>
-                      Заблоковано
+                      {t("users.statusBanned")}
                     </span>
                   ) : (
                     <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground")}>
-                      Активний
+                      {t("users.statusActive")}
                     </span>
                   )}
                 </TableCell>
                 <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-xs">
-                  {formatDate(user.createdAt)}
+                  {formatDateForDisplay(user.createdAt)}
                 </TableCell>
               </TableRow>
             ))

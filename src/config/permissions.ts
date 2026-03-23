@@ -25,8 +25,8 @@ export const PERMISSION_SECTIONS = [
     ],
   },
   {
-    id: "vehicles",
-    label: "Облік авто",
+    id: "products",
+    label: "Облік товарів",
     actions: [
       { id: "view", label: "Перегляд" },
       { id: "create", label: "Створення" },
@@ -37,8 +37,8 @@ export const PERMISSION_SECTIONS = [
     ],
   },
   {
-    id: "vehicles_config",
-    label: "Налаштування обліку авто",
+    id: "products_config",
+    label: "Налаштування обліку товарів",
     actions: [
       { id: "view", label: "Перегляд конфігурації" },
       { id: "edit", label: "Редагування конфігурації" },

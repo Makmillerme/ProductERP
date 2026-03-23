@@ -5,7 +5,7 @@ import { OWNER_ROLE } from "@/config/owner";
 import { ADMIN_ROLE } from "@/config/roles";
 import { prisma } from "@/lib/prisma";
 import { validatePresetValuesForWidget } from "@/lib/validate-preset-values";
-import { validateFormula } from "@/features/vehicles/lib/field-utils";
+import { validateFormula } from "@/features/products/lib/field-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +28,22 @@ export async function GET(_request: Request, context: RouteContext) {
   const { id } = await context.params;
 
   try {
-    const field = await prisma.fieldDefinition.findUnique({ where: { id } });
+    const field = await prisma.fieldDefinition.findUnique({
+      where: { id },
+      include: {
+        fieldDefinitionCategories: { select: { categoryId: true } },
+        fieldDefinitionProductTypes: { select: { productTypeId: true } },
+      },
+    });
     if (!field) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json(field);
+    const { fieldDefinitionCategories, fieldDefinitionProductTypes, ...rest } = field;
+    return NextResponse.json({
+      ...rest,
+      categoryIds: fieldDefinitionCategories.map((c) => c.categoryId),
+      productTypeIds: fieldDefinitionProductTypes.map((p) => p.productTypeId),
+    });
   } catch (e) {
     console.error("[GET /api/admin/field-definitions/[id]]", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -57,6 +68,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     placeholder?: string;
     defaultValue?: string;
     hiddenOnCard?: boolean;
+    categoryIds?: string[];
+    productTypeIds?: string[];
   };
   try {
     body = await request.json();
@@ -85,7 +98,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
     }
 
-    type UpdateData = Record<string, string | null | undefined>;
+    type UpdateData = Record<string, string | null | undefined | boolean>;
     const data: UpdateData = {};
 
     if (existing.isSystem) {
@@ -93,15 +106,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (body.placeholder !== undefined) data.placeholder = body.placeholder?.trim() ?? null;
       if (body.unit !== undefined) data.unit = body.unit?.trim() ?? null;
     } else {
-      if (body.code !== undefined) {
-        const dup = await prisma.fieldDefinition.findFirst({
-          where: { code: body.code.trim(), NOT: { id } },
-        });
-        if (dup) {
-          return NextResponse.json({ error: "Code already exists" }, { status: 409 });
-        }
-        data.code = body.code.trim();
-      }
+      if (body.code !== undefined) data.code = body.code?.trim() || null;
       if (body.label !== undefined) data.label = body.label.trim();
       if (body.dataType !== undefined) data.dataType = body.dataType.trim();
       if (body.widgetType !== undefined) data.widgetType = body.widgetType.trim();
@@ -115,7 +120,47 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (body.hiddenOnCard !== undefined) data.hiddenOnCard = body.hiddenOnCard;
 
     const updated = await prisma.fieldDefinition.update({ where: { id }, data });
-    return NextResponse.json(updated);
+
+    if (body.categoryIds !== undefined || body.productTypeIds !== undefined) {
+      const categoryIds = body.categoryIds !== undefined
+        ? (Array.isArray(body.categoryIds) ? body.categoryIds.filter((id) => id?.trim()) : [])
+        : undefined;
+      const productTypeIds = body.productTypeIds !== undefined
+        ? (Array.isArray(body.productTypeIds) ? body.productTypeIds.filter((id) => id?.trim()) : [])
+        : undefined;
+
+      if (categoryIds !== undefined) {
+        await prisma.fieldDefinitionCategory.deleteMany({ where: { fieldDefinitionId: id } });
+        if (categoryIds.length > 0) {
+          await prisma.fieldDefinitionCategory.createMany({
+            data: categoryIds.map((categoryId) => ({ fieldDefinitionId: id, categoryId })),
+          });
+        }
+      }
+      if (productTypeIds !== undefined) {
+        await prisma.fieldDefinitionProductType.deleteMany({ where: { fieldDefinitionId: id } });
+        if (productTypeIds.length > 0) {
+          await prisma.fieldDefinitionProductType.createMany({
+            data: productTypeIds.map((productTypeId) => ({ fieldDefinitionId: id, productTypeId })),
+          });
+        }
+      }
+    }
+
+    const field = await prisma.fieldDefinition.findUnique({
+      where: { id },
+      include: {
+        fieldDefinitionCategories: { select: { categoryId: true } },
+        fieldDefinitionProductTypes: { select: { productTypeId: true } },
+      },
+    });
+    if (!field) return NextResponse.json(updated);
+    const { fieldDefinitionCategories, fieldDefinitionProductTypes, ...rest } = field;
+    return NextResponse.json({
+      ...rest,
+      categoryIds: fieldDefinitionCategories.map((c) => c.categoryId),
+      productTypeIds: fieldDefinitionProductTypes.map((p) => p.productTypeId),
+    });
   } catch (e) {
     console.error("[PATCH /api/admin/field-definitions/[id]]", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

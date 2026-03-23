@@ -15,8 +15,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthModalStore } from "@/stores/use-auth-modal";
 import { authClient } from "@/lib/auth-client";
+import { useLocale } from "@/lib/locale-provider";
 
 export function AuthModal() {
+  const { t } = useLocale();
   const { open, closeAuthModal } = useAuthModalStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,7 +34,7 @@ export function AuthModal() {
       const res = await authClient.signIn.email({ email: emailTrim, password, callbackURL: typeof window !== "undefined" ? window.location.pathname : "/" });
       if (res.error) {
         setStatus("error");
-        setErrorMessage(res.error.message ?? "Щось пішло не так.");
+        setErrorMessage(res.error.message ?? t("auth.somethingWentWrong"));
         return;
       }
       closeAuthModal();
@@ -44,7 +46,7 @@ export function AuthModal() {
     });
     if (res.error) {
       setStatus("error");
-      setErrorMessage(res.error.message ?? "Щось пішло не так.");
+        setErrorMessage(res.error.message ?? t("auth.somethingWentWrong"));
       return;
     }
     setStatus("sent");
@@ -62,24 +64,26 @@ export function AuthModal() {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Увійти або зареєструватися</DialogTitle>
+          <DialogTitle>{t("auth.modalTitle")}</DialogTitle>
           <DialogDescription>
-            Введіть email — ми надішлемо посилання для входу. Якщо облікового запису немає, він буде створений.
+            {t("auth.modalDescription")}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
           {status === "sent" ? (
             <p className="text-sm text-muted-foreground">
-              Перевірте пошту: на <strong>{email}</strong> надіслано посилання для входу.
+              {t("auth.checkEmailPrefix")}
+              <strong>{email}</strong>
+              {t("auth.checkEmailSuffix")}
             </p>
           ) : (
             <form id="auth-form" onSubmit={handleSubmit} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="auth-email">Email</Label>
+                <Label htmlFor="auth-email">{t("auth.email")}</Label>
                 <Input
                   id="auth-email"
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder={t("auth.emailPlaceholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -88,11 +92,11 @@ export function AuthModal() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="auth-password">Пароль (необов&apos;язково)</Label>
+                <Label htmlFor="auth-password">{t("auth.passwordOptional")}</Label>
                 <Input
                   id="auth-password"
                   type="password"
-                  placeholder="Якщо є пароль — увійти за паролем"
+                  placeholder={t("auth.passwordPlaceholder")}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={status === "loading"}
@@ -108,7 +112,7 @@ export function AuthModal() {
         {status !== "sent" && (
           <DialogFooter>
             <Button type="submit" form="auth-form" disabled={status === "loading"}>
-              {status === "loading" ? "Вхід…" : password ? "Увійти" : "Надіслати посилання"}
+              {status === "loading" ? t("auth.loading") : password ? t("auth.signIn") : t("auth.sendLink")}
             </Button>
           </DialogFooter>
         )}

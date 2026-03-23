@@ -42,3 +42,6 @@ export const SHEET_TABS_CONTENT_MT = "mt-3";
 /** Скрол у sheet: тільки вертикальний, без горизонтального */
 export const SHEET_SCROLL_CLASS =
   "overflow-x-hidden overflow-y-auto";
+
+/** Картка товару: відступ між полями в сітці (mobile + desktop) */
+export const PRODUCT_CARD_GRID_GAP = "gap-4";

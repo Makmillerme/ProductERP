@@ -1,0 +1,1 @@
+Refactoring complete. 1) use-list-config: useLocale, categoryName fallback t("products.categoryDefault"), fetchCategoryConfig(t) for error. 2) field-utils: vehicleTypes→productTypes param rename. 3) system-column-mapping.md: paths vehicles→products. EAV placeholder for non-systemColumn fields — не реалізовано (потребує окремого таску).

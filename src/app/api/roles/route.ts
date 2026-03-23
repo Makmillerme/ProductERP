@@ -62,10 +62,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const existing = await prisma.role.findUnique({ where: { code: slug } });
-    if (existing) {
-      return NextResponse.json({ error: "Роль з таким кодом вже існує" }, { status: 409 });
-    }
     const role = await prisma.role.create({
       data: {
         name: name.trim(),

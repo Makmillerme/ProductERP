@@ -4,52 +4,53 @@ import { NextResponse } from "next/server";
 import { OWNER_ROLE } from "@/config/owner";
 import { ADMIN_ROLE } from "@/config/roles";
 import { prisma } from "@/lib/prisma";
-import { slugify } from "@/lib/slugify";
+import { createProduct, updateProduct } from "@/lib/products-db";
+import { findProductIdByFieldValue } from "@/lib/product-field-values";
 
 export const dynamic = "force-dynamic";
 
-const FIELD_MAP: Record<string, string> = {
-  mrn: "mrn",
-  uktzed: "uktzed",
-  vehicle_type: "productType",
-  brand: "brand",
-  model: "model",
-  modification: "modification",
-  year_model: "yearModel",
-  vin: "vin",
-  serial_number: "serialNumber",
-  gross_weight_kg: "grossWeightKg",
-  payload_kg: "payloadKg",
-  engine_cm3: "engineCm3",
-  power_kw: "powerKw",
-  seats: "seats",
-  wheel_formula: "wheelFormula",
-  producer_country: "producerCountry",
-  customs_value: "customsValue",
-  fuel_type: "fuelType",
-  condition: "condition",
-  body_type: "bodyType",
-  description: "description",
-  create_at_ccd: "createAtCcd",
-  mileage: "mileage",
-  cargo_dimensions: "cargoDimensions",
-  transmission: "transmission",
-  customs_value_plus_10_vat: "customsValuePlus10Vat",
-  customs_value_plus_20_vat: "customsValuePlus20Vat",
-};
-
-const FLOAT_FIELDS = new Set([
-  "grossWeightKg",
-  "payloadKg",
-  "engineCm3",
-  "powerKw",
+/** Поля парсера, що йдуть у fieldValues (code). vehicle_type → productTypeId, решта — EAV. */
+const PARSER_FIELD_CODES = new Set([
+  "mrn",
+  "uktzed",
+  "brand",
+  "model",
+  "modification",
+  "year_model",
+  "vin",
+  "serial_number",
+  "gross_weight_kg",
+  "payload_kg",
+  "engine_cm3",
+  "power_kw",
+  "seats",
+  "wheel_formula",
+  "producer_country",
+  "customs_value",
+  "fuel_type",
+  "condition",
+  "body_type",
+  "description",
+  "create_at_ccd",
   "mileage",
-  "customsValue",
-  "customsValuePlus10Vat",
-  "customsValuePlus20Vat",
+  "cargo_dimensions",
+  "transmission",
+  "customs_value_plus_10_vat",
+  "customs_value_plus_20_vat",
 ]);
 
-const INT_FIELDS = new Set(["yearModel", "seats"]);
+const FLOAT_CODES = new Set([
+  "gross_weight_kg",
+  "payload_kg",
+  "engine_cm3",
+  "power_kw",
+  "mileage",
+  "customs_value",
+  "customs_value_plus_10_vat",
+  "customs_value_plus_20_vat",
+]);
+
+const INT_CODES = new Set(["year_model", "seats"]);
 
 async function requireAdmin() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -61,32 +62,39 @@ async function requireAdmin() {
   return null;
 }
 
-function coerce(key: string, value: unknown): unknown {
+function coerceValue(code: string, value: unknown): unknown {
   if (value === null || value === undefined || value === "") return null;
-  if (INT_FIELDS.has(key)) {
+  if (INT_CODES.has(code)) {
     const n = Number(value);
     return Number.isFinite(n) ? Math.round(n) : null;
   }
-  if (FLOAT_FIELDS.has(key)) {
+  if (FLOAT_CODES.has(code)) {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
   }
   return String(value);
 }
 
-function mapVehicleData(raw: Record<string, unknown>): Record<string, unknown> {
-  const mapped: Record<string, unknown> = {};
-  for (const [snakeKey, value] of Object.entries(raw)) {
-    const camelKey = FIELD_MAP[snakeKey];
-    if (!camelKey) continue;
-    mapped[camelKey] = coerce(camelKey, value);
+function buildFieldValuesFromRaw(raw: Record<string, unknown>): Record<string, unknown> {
+  const fieldValues: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!PARSER_FIELD_CODES.has(key)) continue;
+    const v = coerceValue(key, value);
+    if (v !== null && v !== undefined && v !== "") {
+      fieldValues[key] = v;
+    }
   }
-  return mapped;
+  return fieldValues;
 }
 
-const productTypeCache = new Map<string, string>();
+const productTypeCache = new Map<string, ResolvedProductType>();
 
-async function resolveProductTypeId(typeName: string | null | undefined): Promise<string | null> {
+type ResolvedProductType = { id: string; categoryId: string | null };
+
+async function resolveProductType(
+  typeName: string | null | undefined,
+  defaultCategoryId?: string | null
+): Promise<ResolvedProductType | null> {
   if (!typeName?.trim()) return null;
   const name = typeName.trim();
   const nameLower = name.toLowerCase();
@@ -97,34 +105,36 @@ async function resolveProductTypeId(typeName: string | null | undefined): Promis
 
   const existing = await prisma.productType.findFirst({
     where: { name: { equals: name, mode: "insensitive" } },
-    select: { id: true },
+    select: { id: true, categoryId: true },
   });
 
   if (existing) {
-    productTypeCache.set(nameLower, existing.id);
-    return existing.id;
+    const result = { id: existing.id, categoryId: existing.categoryId };
+    productTypeCache.set(nameLower, result);
+    return result;
   }
-
-  const code = slugify(name) || `type-${Date.now()}`;
-  const codeExists = await prisma.productType.findUnique({ where: { code } });
-  const finalCode = codeExists ? `${code}-${Date.now()}` : code;
 
   const created = await prisma.productType.create({
-    data: { name, code: finalCode, isAutoDetected: true },
+    data: {
+      name,
+      isAutoDetected: true,
+      categoryId: defaultCategoryId?.trim() ?? null,
+    },
   });
 
-  productTypeCache.set(nameLower, created.id);
-  return created.id;
+  const result = { id: created.id, categoryId: created.categoryId };
+  productTypeCache.set(nameLower, result);
+  return result;
 }
 
-async function findExisting(mrn: string | null, vin: string | null) {
+async function findExistingProductId(mrn: string | null, vin: string | null): Promise<number | null> {
   if (mrn) {
-    const found = await prisma.product.findFirst({ where: { mrn } });
-    if (found) return found;
+    const id = await findProductIdByFieldValue("mrn", mrn);
+    if (id) return id;
   }
   if (vin) {
-    const found = await prisma.product.findFirst({ where: { vin } });
-    if (found) return found;
+    const id = await findProductIdByFieldValue("vin", vin);
+    if (id) return id;
   }
   return null;
 }
@@ -133,17 +143,22 @@ export async function POST(request: Request) {
   const denied = await requireAdmin();
   if (denied) return denied;
 
-  let body: { vehicles?: Record<string, unknown>[] };
+  let body: {
+    products?: Record<string, unknown>[];
+    vehicles?: Record<string, unknown>[];
+    categoryId?: string;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  if (!Array.isArray(body.vehicles) || body.vehicles.length === 0) {
+  const items = body.products ?? body.vehicles;
+  if (!Array.isArray(items) || items.length === 0) {
     return NextResponse.json(
-      { error: "vehicles array is required and must not be empty" },
-      { status: 400 },
+      { error: "products or vehicles array is required and must not be empty" },
+      { status: 400 }
     );
   }
 
@@ -153,27 +168,39 @@ export async function POST(request: Request) {
 
   productTypeCache.clear();
 
-  for (let i = 0; i < body.vehicles.length; i++) {
+  for (let i = 0; i < items.length; i++) {
     try {
-      const raw = body.vehicles[i];
-      const data = mapVehicleData(raw);
+      const raw = items[i] as Record<string, unknown>;
+      const productTypeName = (raw.vehicle_type ?? raw.productType) as string | null | undefined;
+      const resolved = await resolveProductType(productTypeName, body.categoryId);
 
-      const productTypeName = data.productType as string | null;
-      const productTypeId = await resolveProductTypeId(productTypeName);
-      if (productTypeId) {
-        data.productTypeId = productTypeId;
+      let categoryId: string | null = resolved?.categoryId ?? null;
+      if (!categoryId && body.categoryId) categoryId = body.categoryId;
+      if (!categoryId?.trim()) {
+        errors.push(`Product[${i}]: category_id обов'язковий (вкажіть categoryId у body або прив'яжіть productType до категорії)`);
+        continue;
       }
 
-      const mrn = (data.mrn as string) || null;
-      const vin = (data.vin as string) || null;
+      const productTypeId = resolved?.id ?? null;
+      const fieldValues = buildFieldValuesFromRaw(raw);
 
-      const existing = await findExisting(mrn, vin);
+      const mrn = (fieldValues.mrn as string) || (raw.mrn as string) || null;
+      const vin = (fieldValues.vin as string) || (raw.vin as string) || null;
 
-      if (existing) {
-        await prisma.product.update({ where: { id: existing.id }, data });
+      const existingId = await findExistingProductId(mrn, vin);
+
+      const payload = {
+        product_type_id: productTypeId,
+        category_id: categoryId,
+        product_status_id: null,
+        ...fieldValues,
+      };
+
+      if (existingId) {
+        await updateProduct(existingId, payload);
         updated++;
       } else {
-        await prisma.product.create({ data });
+        await createProduct(payload);
         created++;
       }
     } catch (e) {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { useLocale } from "@/lib/locale-provider";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -31,6 +32,7 @@ export function DeleteUserDialog({
   currentUserId,
   onSuccess,
 }: DeleteUserDialogProps) {
+  const { t, tFormat } = useLocale();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +47,7 @@ export function DeleteUserDialog({
         userId: user.id,
       });
       if (res.error) {
-        const msg = res.error.message ?? "Помилка видалення.";
+        const msg = res.error.message ?? t("errors.deleteFailed");
         setError(msg);
         toast.error(msg);
         return;
@@ -53,7 +55,7 @@ export function DeleteUserDialog({
       onSuccess();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Помилка видалення.");
+      setError(err instanceof Error ? err.message : t("errors.deleteFailed"));
     } finally {
       setLoading(false);
     }
@@ -65,11 +67,11 @@ export function DeleteUserDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Видалити користувача</AlertDialogTitle>
+          <AlertDialogTitle>{t("usersDelete.title")}</AlertDialogTitle>
           <AlertDialogDescription>
             {isSelf
-              ? "Ви видаляєте власний обліковий запис. Вас одразу вийде з системи. Цю дію не можна скасувати."
-              : `Користувача ${user.email} буде видалено назавжди. Повʼязані сесії також будуть видалені. Цю дію не можна скасувати.`}
+              ? t("usersDelete.descriptionSelf")
+              : tFormat("usersDelete.descriptionOther", { email: user.email })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && (
@@ -78,7 +80,7 @@ export function DeleteUserDialog({
           </AlertDialogBody>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>Скасувати</AlertDialogCancel>
+          <AlertDialogCancel disabled={loading}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault();
@@ -87,7 +89,7 @@ export function DeleteUserDialog({
             disabled={loading}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {loading ? "Видалення…" : "Видалити"}
+            {loading ? t("usersDelete.actioning") : t("usersDelete.action")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

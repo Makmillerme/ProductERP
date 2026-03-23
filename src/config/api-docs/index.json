@@ -1,0 +1,106 @@
+{
+  "sections": [
+    {
+      "id": "auth",
+      "titleKey": "apiDocs.sections.auth"
+    },
+    {
+      "id": "products",
+      "titleKey": "apiDocs.sections.products"
+    },
+    {
+      "id": "product-config",
+      "titleKey": "apiDocs.sections.productConfig"
+    },
+    {
+      "id": "admin",
+      "titleKey": "apiDocs.sections.admin"
+    },
+    {
+      "id": "parser",
+      "titleKey": "apiDocs.sections.parser"
+    }
+  ],
+  "endpoints": {
+    "auth": [
+      {
+        "method": "GET",
+        "path": "/api/auth/session",
+        "descriptionKey": "apiDocs.auth.session"
+      }
+    ],
+    "products": [
+      {
+        "method": "GET",
+        "path": "/api/products",
+        "descriptionKey": "apiDocs.products.list"
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/[id]",
+        "descriptionKey": "apiDocs.products.get"
+      },
+      {
+        "method": "POST",
+        "path": "/api/products",
+        "descriptionKey": "apiDocs.products.create"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/products/[id]",
+        "descriptionKey": "apiDocs.products.update"
+      }
+    ],
+    "product-config": [
+      {
+        "method": "GET",
+        "path": "/api/product-config/[productTypeId]",
+        "descriptionKey": "apiDocs.productConfig.byType"
+      },
+      {
+        "method": "GET",
+        "path": "/api/product-config/category/[categoryId]",
+        "descriptionKey": "apiDocs.productConfig.byCategory"
+      }
+    ],
+    "admin": [
+      {
+        "method": "GET",
+        "path": "/api/admin/categories",
+        "descriptionKey": "apiDocs.admin.categories"
+      },
+      {
+        "method": "GET",
+        "path": "/api/admin/field-definitions",
+        "descriptionKey": "apiDocs.admin.fieldDefinitions"
+      },
+      {
+        "method": "GET",
+        "path": "/api/admin/product-types",
+        "descriptionKey": "apiDocs.admin.productTypes"
+      }
+    ],
+    "parser": [
+      {
+        "method": "POST",
+        "path": "/api/admin/parser/import",
+        "descriptionKey": "apiDocs.parser.import"
+      },
+      {
+        "method": "GET",
+        "path": "/api/admin/parser/field-mapping",
+        "descriptionKey": "apiDocs.parser.fieldMappingGet"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/parser/field-mapping",
+        "descriptionKey": "apiDocs.parser.fieldMappingPost"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/parser/auto-detect-types",
+        "descriptionKey": "apiDocs.parser.autoDetect"
+      }
+    ]
+  }
+}

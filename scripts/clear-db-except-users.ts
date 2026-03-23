@@ -28,6 +28,8 @@ async function main() {
     await tx.productDocument.deleteMany({});
     await tx.product.deleteMany({});
     await tx.tabField.deleteMany({});
+    await tx.fieldDefinitionCategory.deleteMany({});
+    await tx.fieldDefinitionProductType.deleteMany({});
     await tx.dataSourceMapping.deleteMany({});
     await tx.displayConfig.deleteMany({});
     await tx.tabDefinition.deleteMany({});

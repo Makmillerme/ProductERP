@@ -1,0 +1,1 @@
+ProductCardPreviewModal: removed useProducts and sampleProduct. Preview is not a real product view - it shows card layout only. Always pass product={null} to ProductDetailSheet. Benefits: no products API call, faster preview open, simpler logic. File: src/features/management/components/product-card-preview-modal.tsx

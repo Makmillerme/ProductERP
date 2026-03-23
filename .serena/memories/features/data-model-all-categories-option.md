@@ -1,0 +1,1 @@
+Опція «Усі категорії» та «Усі типи» на сторінці Модель даних (Поля та дані). Дефолт при першому заході: обидва «Усі». Збереження: cardCategoryId (включно з ""), dataModelProductTypeId (новий ключ). management-state: getDataModelProductTypeId, setDataModelProductTypeId.

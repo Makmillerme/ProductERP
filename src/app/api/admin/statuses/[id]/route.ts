@@ -45,7 +45,6 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   let body: {
     name?: string;
-    code?: string;
     color?: string;
     order?: number;
     description?: string;
@@ -63,15 +62,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (body.code?.trim()) {
-      const dup = await prisma.productStatus.findFirst({
-        where: { code: body.code.trim(), NOT: { id } },
-      });
-      if (dup) {
-        return NextResponse.json({ error: "Code already exists" }, { status: 409 });
-      }
-    }
-
     const updated = await prisma.$transaction(async (tx) => {
       if (body.isDefault) {
         await tx.productStatus.updateMany({
@@ -84,7 +74,6 @@ export async function PATCH(request: Request, context: RouteContext) {
         where: { id },
         data: {
           ...(body.name !== undefined && { name: body.name.trim() }),
-          ...(body.code !== undefined && { code: body.code!.trim() }),
           ...(body.color !== undefined && { color: body.color!.trim() }),
           ...(body.order !== undefined && { order: body.order }),
           ...(body.description !== undefined && { description: body.description?.trim() ?? null }),

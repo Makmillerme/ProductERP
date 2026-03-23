@@ -5,7 +5,7 @@
 
 import { parseCompositePresetValues } from "@/config/composite-field";
 import type { WidgetType } from "@/config/field-constructor";
-import { validateFormula } from "@/features/vehicles/lib/field-utils";
+import { validateFormula } from "@/features/products/lib/field-utils";
 
 const WIDGETS_WITH_PRESETS: WidgetType[] = [
   "select",
@@ -75,11 +75,21 @@ export function validatePresetValuesForWidget(
     }
 
     if (["select", "multiselect", "radio"].includes(widgetType)) {
-      if (!Array.isArray(parsed)) {
-        return "Некоректний формат: очікується JSON масив";
+      let opts: unknown[];
+      if (Array.isArray(parsed)) {
+        opts = parsed;
+      } else if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "options" in parsed &&
+        Array.isArray((parsed as { options?: unknown }).options)
+      ) {
+        opts = (parsed as { options: unknown[] }).options;
+      } else {
+        return "Некоректний формат: очікується JSON масив або об'єкт { options: [...] }";
       }
       const values = new Set<string>();
-      for (const o of parsed as unknown[]) {
+      for (const o of opts) {
         if (
           typeof o !== "object" ||
           o === null ||

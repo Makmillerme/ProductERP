@@ -1,12 +1,16 @@
 /**
- * Маппінг між Prisma Product (camelCase, Date) та фронтовим типом Product (snake_case, string для дат).
- * Сервіс для роботи з таблицею products у БД.
+ * Маппінг між Prisma Product (camelCase) та фронтовим Product (snake_case base + EAV).
+ * Всі польові дані — через ProductFieldValue.
  */
 import { prisma } from "@/lib/prisma";
-import type { Product, ProductMedia } from "@/features/vehicles/types";
-import type { ProductFilterState } from "@/features/vehicles/types";
-import type { ProductColumnId } from "@/features/vehicles/types";
+import type { Product, ProductMedia } from "@/features/products/types";
+import type { ProductFilterState, ProductColumnId } from "@/features/products/types";
 import type { Prisma } from "@/generated/prisma/client";
+import {
+  upsertProductFieldValues,
+  loadProductFieldValues,
+  getFieldDefinitionsForCategory,
+} from "@/lib/product-field-values";
 
 type DbProductMedia = {
   id: number;
@@ -18,46 +22,15 @@ type DbProductMedia = {
   createdAt: Date;
 };
 
-type DbProduct = {
+type DbProductRow = {
   id: number;
+  productTypeId: string | null;
+  categoryId: string | null;
+  productStatusId: string | null;
   processedFileId: number | null;
-  payloadJson: string;
   pdfUrl: string | null;
   briefPdfPath: string | null;
-  status: string | null;
-  vin: string | null;
-  serialNumber: string | null;
-  productType: string | null;
-  brand: string | null;
-  model: string | null;
-  modification: string | null;
-  yearModel: number | null;
-  producerCountry: string | null;
-  location: string | null;
-  description: string | null;
-  grossWeightKg: number | null;
-  payloadKg: number | null;
-  engineCm3: number | null;
-  powerKw: number | null;
-  wheelFormula: string | null;
-  seats: number | null;
-  transmission: string | null;
-  mileage: number | null;
-  bodyType: string | null;
-  condition: string | null;
-  fuelType: string | null;
-  cargoDimensions: string | null;
-  mrn: string | null;
-  uktzed: string | null;
-  createAtCcd: string | null;
   createdAt: Date;
-  customsValue: number | null;
-  customsValuePlus10Vat: number | null;
-  customsValuePlus20Vat: number | null;
-  costWithoutVat: number | null;
-  costWithVat: number | null;
-  vatAmount: number | null;
-  currency: string | null;
   media?: DbProductMedia[];
 };
 
@@ -73,239 +46,167 @@ function dbMediaToMedia(m: DbProductMedia): ProductMedia {
   };
 }
 
-export function dbToProduct(row: DbProduct): Product {
-  return {
+function rowToBaseProduct(row: DbProductRow): Omit<Product, "media"> & { media?: ProductMedia[] } {
+  const base: Product = {
     id: row.id,
     processed_file_id: row.processedFileId,
-    payload_json: row.payloadJson,
     pdf_url: row.pdfUrl,
     brief_pdf_path: row.briefPdfPath,
-    status: row.status,
-    vin: row.vin,
-    serial_number: row.serialNumber,
-    product_type: row.productType,
-    brand: row.brand,
-    model: row.model,
-    modification: row.modification,
-    year_model: row.yearModel,
-    producer_country: row.producerCountry,
-    location: row.location,
-    description: row.description,
-    gross_weight_kg: row.grossWeightKg,
-    payload_kg: row.payloadKg,
-    engine_cm3: row.engineCm3,
-    power_kw: row.powerKw,
-    wheel_formula: row.wheelFormula,
-    seats: row.seats,
-    transmission: row.transmission,
-    mileage: row.mileage,
-    body_type: row.bodyType,
-    condition: row.condition,
-    fuel_type: row.fuelType,
-    cargo_dimensions: row.cargoDimensions,
-    mrn: row.mrn,
-    uktzed: row.uktzed,
-    create_at_ccd: row.createAtCcd,
+    product_status_id: row.productStatusId,
+    product_type_id: row.productTypeId,
+    category_id: row.categoryId,
     created_at: row.createdAt.toISOString(),
-    customs_value: row.customsValue,
-    customs_value_plus_10_vat: row.customsValuePlus10Vat,
-    customs_value_plus_20_vat: row.customsValuePlus20Vat,
-    cost_without_vat: row.costWithoutVat,
-    cost_with_vat: row.costWithVat,
-    vat_amount: row.vatAmount,
-    currency: row.currency,
     media: row.media?.map(dbMediaToMedia),
   };
+  return base;
 }
 
-function productToCreateInput(v: Omit<Product, "id" | "created_at">): Prisma.ProductUncheckedCreateInput {
-  return {
-    processedFileId: v.processed_file_id ?? undefined,
-    payloadJson: v.payload_json ?? "{}",
-    pdfUrl: v.pdf_url ?? undefined,
-    briefPdfPath: v.brief_pdf_path ?? undefined,
-    status: v.status ?? undefined,
-    vin: v.vin ?? undefined,
-    serialNumber: v.serial_number ?? undefined,
-    productType: v.product_type ?? undefined,
-    brand: v.brand ?? undefined,
-    model: v.model ?? undefined,
-    modification: v.modification ?? undefined,
-    yearModel: v.year_model ?? undefined,
-    producerCountry: v.producer_country ?? undefined,
-    location: v.location ?? undefined,
-    description: v.description ?? undefined,
-    grossWeightKg: v.gross_weight_kg ?? undefined,
-    payloadKg: v.payload_kg ?? undefined,
-    engineCm3: v.engine_cm3 ?? undefined,
-    powerKw: v.power_kw ?? undefined,
-    wheelFormula: v.wheel_formula ?? undefined,
-    seats: v.seats ?? undefined,
-    transmission: v.transmission ?? undefined,
-    mileage: v.mileage ?? undefined,
-    bodyType: v.body_type ?? undefined,
-    condition: v.condition ?? undefined,
-    fuelType: v.fuel_type ?? undefined,
-    cargoDimensions: v.cargo_dimensions ?? undefined,
-    mrn: v.mrn ?? undefined,
-    uktzed: v.uktzed ?? undefined,
-    createAtCcd: v.create_at_ccd ?? undefined,
-    customsValue: v.customs_value ?? undefined,
-    customsValuePlus10Vat: v.customs_value_plus_10_vat ?? undefined,
-    customsValuePlus20Vat: v.customs_value_plus_20_vat ?? undefined,
-    costWithoutVat: v.cost_without_vat ?? undefined,
-    costWithVat: v.cost_with_vat ?? undefined,
-    vatAmount: v.vat_amount ?? undefined,
-    currency: v.currency ?? undefined,
+function mergeFieldValues(base: Record<string, unknown>, fieldValues: Record<string, unknown>): Product {
+  return { ...base, ...fieldValues } as Product;
+}
+
+const BASE_PRODUCT_KEYS = new Set([
+  "id",
+  "processed_file_id",
+  "pdf_url",
+  "brief_pdf_path",
+  "product_status_id",
+  "product_type_id",
+  "category_id",
+  "created_at",
+  "media",
+]);
+
+type BaseProductInput = {
+  processedFileId?: number | null;
+  pdfUrl?: string | null;
+  briefPdfPath?: string | null;
+  productStatusId?: string | null;
+  productTypeId?: string | null;
+  categoryId?: string | null;
+};
+
+function extractBaseAndFieldValues(data: Record<string, unknown>): {
+  base: BaseProductInput;
+  fieldValues: Record<string, unknown>;
+} {
+  const base: Record<string, unknown> = {};
+  const fieldValues: Record<string, unknown> = {};
+  const snakeToCamel: Record<string, string> = {
+    processed_file_id: "processedFileId",
+    pdf_url: "pdfUrl",
+    brief_pdf_path: "briefPdfPath",
+    product_status_id: "productStatusId",
+    product_type_id: "productTypeId",
+    category_id: "categoryId",
   };
+  for (const [key, value] of Object.entries(data)) {
+    if (BASE_PRODUCT_KEYS.has(key)) {
+      const camel = snakeToCamel[key] ?? key;
+      if (key === "processed_file_id") base[camel] = value as number | null;
+      else if (key === "media") continue;
+      else base[camel] = value;
+    } else {
+      fieldValues[key] = value;
+    }
+  }
+  return { base: base as BaseProductInput, fieldValues };
 }
 
-function productToUpdateInput(v: Partial<Product>): Prisma.ProductUncheckedUpdateInput {
-  const input: Prisma.ProductUncheckedUpdateInput = {};
-  if (v.processed_file_id !== undefined) input.processedFileId = v.processed_file_id;
-  if (v.payload_json !== undefined) input.payloadJson = v.payload_json;
-  if (v.pdf_url !== undefined) input.pdfUrl = v.pdf_url;
-  if (v.brief_pdf_path !== undefined) input.briefPdfPath = v.brief_pdf_path;
-  if (v.status !== undefined) input.status = v.status;
-  if (v.vin !== undefined) input.vin = v.vin;
-  if (v.serial_number !== undefined) input.serialNumber = v.serial_number;
-  if (v.product_type !== undefined) input.productType = v.product_type;
-  if (v.brand !== undefined) input.brand = v.brand;
-  if (v.model !== undefined) input.model = v.model;
-  if (v.modification !== undefined) input.modification = v.modification;
-  if (v.year_model !== undefined) input.yearModel = v.year_model;
-  if (v.producer_country !== undefined) input.producerCountry = v.producer_country;
-  if (v.location !== undefined) input.location = v.location;
-  if (v.description !== undefined) input.description = v.description;
-  if (v.gross_weight_kg !== undefined) input.grossWeightKg = v.gross_weight_kg;
-  if (v.payload_kg !== undefined) input.payloadKg = v.payload_kg;
-  if (v.engine_cm3 !== undefined) input.engineCm3 = v.engine_cm3;
-  if (v.power_kw !== undefined) input.powerKw = v.power_kw;
-  if (v.wheel_formula !== undefined) input.wheelFormula = v.wheel_formula;
-  if (v.seats !== undefined) input.seats = v.seats;
-  if (v.transmission !== undefined) input.transmission = v.transmission;
-  if (v.mileage !== undefined) input.mileage = v.mileage;
-  if (v.body_type !== undefined) input.bodyType = v.body_type;
-  if (v.condition !== undefined) input.condition = v.condition;
-  if (v.fuel_type !== undefined) input.fuelType = v.fuel_type;
-  if (v.cargo_dimensions !== undefined) input.cargoDimensions = v.cargo_dimensions;
-  if (v.mrn !== undefined) input.mrn = v.mrn;
-  if (v.uktzed !== undefined) input.uktzed = v.uktzed;
-  if (v.create_at_ccd !== undefined) input.createAtCcd = v.create_at_ccd;
-  if (v.customs_value !== undefined) input.customsValue = v.customs_value;
-  if (v.customs_value_plus_10_vat !== undefined) input.customsValuePlus10Vat = v.customs_value_plus_10_vat;
-  if (v.customs_value_plus_20_vat !== undefined) input.customsValuePlus20Vat = v.customs_value_plus_20_vat;
-  if (v.cost_without_vat !== undefined) input.costWithoutVat = v.cost_without_vat;
-  if (v.cost_with_vat !== undefined) input.costWithVat = v.cost_with_vat;
-  if (v.vat_amount !== undefined) input.vatAmount = v.vat_amount;
-  if (v.currency !== undefined) input.currency = v.currency;
-  return input;
-}
+const BASE_FILTER_KEYS = new Set(["product_status_id", "productStatusId", "product_type_id", "productTypeId"]);
 
 function buildWhere(
-  search: string,
   filter: ProductFilterState,
-  categoryId?: string
+  categoryId?: string,
+  search?: string,
+  searchableFieldCodes?: string[]
 ): Prisma.ProductWhereInput {
   const and: Prisma.ProductWhereInput[] = [];
 
   if (categoryId?.trim()) {
-    and.push({
-      productTypeRef: { categoryId: categoryId.trim() },
-    });
-  }
-
-  if (search.trim()) {
-    const q = search.trim().toLowerCase();
+    const catId = categoryId.trim();
     and.push({
       OR: [
-        { mrn: { not: null, contains: q, mode: "insensitive" } },
-        { vin: { not: null, contains: q, mode: "insensitive" } },
-        { serialNumber: { not: null, contains: q, mode: "insensitive" } },
-        { brand: { not: null, contains: q, mode: "insensitive" } },
-        { model: { not: null, contains: q, mode: "insensitive" } },
+        { productTypeRef: { categoryId: catId } },
+        { categoryId: catId },
       ],
     });
   }
 
-  if (filter.product_type?.trim()) {
-    and.push({
-      productType: { contains: filter.product_type.trim(), mode: "insensitive" },
-    });
+  const productStatusId = filter.product_status_id ?? filter.productStatusId;
+  const productTypeId = filter.product_type_id ?? filter.productTypeId;
+  if (productStatusId?.trim()) and.push({ productStatusId: productStatusId.trim() });
+  if (productTypeId?.trim()) and.push({ productTypeId: productTypeId.trim() });
+
+  if (search?.trim() && searchableFieldCodes?.length) {
+    const q = search.trim();
+    const codes = searchableFieldCodes.filter(Boolean);
+    if (codes.length > 0) {
+      and.push({
+        fieldValues: {
+          some: {
+            fieldDefinition: { code: { in: codes } },
+            textValue: { contains: q, mode: "insensitive" },
+          },
+        },
+      });
+    }
   }
-  if (filter.brand?.trim()) {
-    and.push({
-      brand: { contains: filter.brand.trim(), mode: "insensitive" },
-    });
-  }
-  if (filter.model?.trim()) {
-    and.push({
-      model: { contains: filter.model.trim(), mode: "insensitive" },
-    });
-  }
-  if (filter.year_from) {
-    const y = parseInt(filter.year_from, 10);
-    if (!Number.isNaN(y)) and.push({ yearModel: { gte: y } });
-  }
-  if (filter.year_to) {
-    const y = parseInt(filter.year_to, 10);
-    if (!Number.isNaN(y)) and.push({ yearModel: { lte: y } });
+
+  for (const [key, value] of Object.entries(filter)) {
+    const v = String(value ?? "").trim();
+    if (!v) continue;
+    if (BASE_FILTER_KEYS.has(key)) continue;
+
+    const isFrom = key.endsWith("_from");
+    const isTo = key.endsWith("_to");
+    const code = isFrom ? key.slice(0, -5) : isTo ? key.slice(0, -3) : key;
+
+    if (isFrom) {
+      const num = parseFloat(v);
+      if (!Number.isNaN(num)) {
+        and.push({
+          fieldValues: {
+            some: {
+              fieldDefinition: { code },
+              numericValue: { gte: num },
+            },
+          },
+        });
+      }
+    } else if (isTo) {
+      const num = parseFloat(v);
+      if (!Number.isNaN(num)) {
+        and.push({
+          fieldValues: {
+            some: {
+              fieldDefinition: { code },
+              numericValue: { lte: num },
+            },
+          },
+        });
+      }
+    } else {
+      and.push({
+        fieldValues: {
+          some: {
+            fieldDefinition: { code },
+            textValue: { contains: v, mode: "insensitive" },
+          },
+        },
+      });
+    }
   }
 
   if (and.length === 0) return {};
   return { AND: and };
 }
 
-const SORT_KEYS: ProductColumnId[] = [
-  "processed_file_id", "status", "vin", "serial_number", "product_type",
-  "brand", "model", "modification", "year_model", "producer_country", "location", "description",
-  "gross_weight_kg", "payload_kg", "engine_cm3", "power_kw", "wheel_formula", "seats",
-  "transmission", "mileage", "body_type", "condition", "fuel_type", "cargo_dimensions",
-  "mrn", "uktzed", "create_at_ccd", "created_at",
-  "customs_value", "customs_value_plus_10_vat", "customs_value_plus_20_vat",
-  "cost_without_vat", "cost_with_vat", "vat_amount", "currency",
-];
-
 function getOrderBy(sortKey: ProductColumnId | null, sortDir: "asc" | "desc"): Prisma.ProductOrderByWithRelationInput {
-  const key = sortKey && SORT_KEYS.includes(sortKey) ? sortKey : "created_at";
-  const map: Record<string, Prisma.ProductOrderByWithRelationInput> = {
-    processed_file_id: { processedFileId: sortDir },
-    status: { status: sortDir },
-    vin: { vin: sortDir },
-    serial_number: { serialNumber: sortDir },
-    product_type: { productType: sortDir },
-    brand: { brand: sortDir },
-    model: { model: sortDir },
-    modification: { modification: sortDir },
-    year_model: { yearModel: sortDir },
-    producer_country: { producerCountry: sortDir },
-    location: { location: sortDir },
-    description: { description: sortDir },
-    gross_weight_kg: { grossWeightKg: sortDir },
-    payload_kg: { payloadKg: sortDir },
-    engine_cm3: { engineCm3: sortDir },
-    power_kw: { powerKw: sortDir },
-    wheel_formula: { wheelFormula: sortDir },
-    seats: { seats: sortDir },
-    transmission: { transmission: sortDir },
-    mileage: { mileage: sortDir },
-    body_type: { bodyType: sortDir },
-    condition: { condition: sortDir },
-    fuel_type: { fuelType: sortDir },
-    cargo_dimensions: { cargoDimensions: sortDir },
-    mrn: { mrn: sortDir },
-    uktzed: { uktzed: sortDir },
-    create_at_ccd: { createAtCcd: sortDir },
-    created_at: { createdAt: sortDir },
-    customs_value: { customsValue: sortDir },
-    customs_value_plus_10_vat: { customsValuePlus10Vat: sortDir },
-    customs_value_plus_20_vat: { customsValuePlus20Vat: sortDir },
-    cost_without_vat: { costWithoutVat: sortDir },
-    cost_with_vat: { costWithVat: sortDir },
-    vat_amount: { vatAmount: sortDir },
-    currency: { currency: sortDir },
-  };
-  return map[key] ?? { createdAt: sortDir };
+  const valid: ProductColumnId[] = ["created_at", "id"];
+  const key = sortKey && valid.includes(sortKey) ? sortKey : "created_at";
+  const camel = key === "created_at" ? "createdAt" : key;
+  return { [camel]: sortDir };
 }
 
 export type ListProductsParams = {
@@ -316,6 +217,7 @@ export type ListProductsParams = {
   page?: number;
   pageSize?: number;
   categoryId?: string;
+  searchableFieldCodes?: string[];
 };
 
 export type ListProductsResult = {
@@ -328,23 +230,16 @@ export type ListProductsResult = {
 export async function listProducts(params: ListProductsParams): Promise<ListProductsResult> {
   const {
     search = "",
-    filter = {
-      product_type: "",
-      brand: "",
-      model: "",
-      year_from: "",
-      year_to: "",
-      value_from: "",
-      value_to: "",
-    },
+    filter = {},
     sortKey = "created_at",
     sortDir = "desc",
     page = 1,
     pageSize = 500,
     categoryId = undefined,
+    searchableFieldCodes = undefined,
   } = params;
 
-  const where = buildWhere(search, filter, categoryId);
+  const where = buildWhere(filter, categoryId, search, searchableFieldCodes);
   const orderBy = getOrderBy(sortKey ?? null, sortDir);
 
   const [items, total] = await Promise.all([
@@ -353,64 +248,120 @@ export async function listProducts(params: ListProductsParams): Promise<ListProd
       orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
+      include: {
+        media: { orderBy: { order: "asc" } },
+        fieldValues: { include: { fieldDefinition: { select: { id: true, code: true, dataType: true } } } },
+      },
     }),
     prisma.product.count({ where }),
   ]);
 
-  let list = (items as DbProduct[]).map(dbToProduct);
-  const valueFrom = filter.value_from ? parseFloat(filter.value_from) : NaN;
-  const valueTo = filter.value_to ? parseFloat(filter.value_to) : NaN;
-  if (!Number.isNaN(valueFrom) || !Number.isNaN(valueTo)) {
-    list = list.filter((v) => {
-      const num = v.customs_value ?? v.cost_without_vat ?? v.cost_with_vat;
-      if (num == null || Number.isNaN(num)) return true;
-      if (!Number.isNaN(valueFrom) && num < valueFrom) return false;
-      if (!Number.isNaN(valueTo) && num > valueTo) return false;
-      return true;
-    });
+  const products: Product[] = [];
+  for (const row of items) {
+  const baseObj = rowToBaseProduct(row as DbProductRow);
+  const base = baseObj as Record<string, unknown>;
+  const fv: Record<string, unknown> = {};
+  for (const v of row.fieldValues ?? []) {
+      const fd = v.fieldDefinition;
+      const key = fd.code ?? fd.id;
+      const dt = fd.dataType ?? "string";
+      let val: unknown;
+      if (dt === "integer" || dt === "float") val = v.numericValue;
+      else if (dt === "date" || dt === "datetime") val = v.dateValue?.toISOString() ?? null;
+      else val = v.textValue ?? null;
+      if (val !== null && val !== undefined && (typeof val !== "string" || val !== "")) {
+        if (typeof val === "string" && val.trim()) {
+          const t = val.trim();
+          if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
+            try {
+              val = JSON.parse(t) as unknown;
+            } catch {
+              // leave as string
+            }
+          }
+        }
+        fv[key] = val;
+      }
+    }
+    products.push(mergeFieldValues(base, fv));
   }
 
-  return {
-    items: list,
-    total: list.length === items.length ? total : list.length,
-    page,
-    pageSize,
-  };
+  return { items: products, total, page, pageSize };
 }
 
 export async function getProductById(id: number): Promise<Product | null> {
-  try {
-    const row = await prisma.product.findUnique({
-      where: { id },
-      include: { media: { orderBy: { order: "asc" } } },
-    });
-    if (!row) return null;
-    return dbToProduct(row as DbProduct);
-  } catch (e: unknown) {
-    const code = (e as { code?: string })?.code;
-    if (code === "P2021") {
-      const row = await prisma.product.findUnique({ where: { id } });
-      if (!row) return null;
-      return dbToProduct({ ...row, media: [] } as DbProduct);
-    }
-    throw e;
-  }
-}
-
-export async function createProduct(data: Omit<Product, "id" | "created_at">): Promise<Product> {
-  const row = await prisma.product.create({
-    data: productToCreateInput(data),
+  const row = await prisma.product.findUnique({
+    where: { id },
+    include: {
+      media: { orderBy: { order: "asc" } },
+      fieldValues: { include: { fieldDefinition: { select: { id: true, code: true, dataType: true } } } },
+    },
   });
-  return dbToProduct(row as DbProduct);
+  if (!row) return null;
+  const base = rowToBaseProduct(row as DbProductRow);
+  const fv = await loadProductFieldValues(id);
+  return mergeFieldValues(base, fv);
 }
 
-export async function updateProduct(id: number, data: Partial<Omit<Product, "id">>): Promise<Product | null> {
+export type CreateProductInput = Omit<Product, "id" | "created_at">;
+
+export async function createProduct(data: CreateProductInput): Promise<Product> {
+  const { base, fieldValues } = extractBaseAndFieldValues(data as Record<string, unknown>);
+  const categoryId = (base.categoryId ?? data.category_id) as string | undefined;
+  if (!categoryId?.trim()) {
+    throw new Error("category_id обов'язковий для створення товару");
+  }
+  const row = await prisma.product.create({
+    data: {
+      processedFileId: base.processedFileId ?? undefined,
+      pdfUrl: base.pdfUrl ?? undefined,
+      briefPdfPath: base.briefPdfPath ?? undefined,
+      productStatusId: base.productStatusId ?? undefined,
+      productTypeId: base.productTypeId ?? undefined,
+      categoryId: base.categoryId ?? undefined,
+    },
+    include: {
+      media: { orderBy: { order: "asc" } },
+    },
+  });
+  const defs = await getFieldDefinitionsForCategory(categoryId.trim());
+  if (Object.keys(fieldValues).length > 0) {
+    await upsertProductFieldValues(row.id, fieldValues, defs);
+  }
+  const loaded = await loadProductFieldValues(row.id);
+  const baseProduct = rowToBaseProduct(row as DbProductRow);
+  return mergeFieldValues(baseProduct, loaded);
+}
+
+export async function updateProduct(
+  id: number,
+  data: Partial<Omit<Product, "id">>
+): Promise<Product | null> {
+  const { base, fieldValues } = extractBaseAndFieldValues(data as Record<string, unknown>);
+  const updateData: Prisma.ProductUncheckedUpdateInput = {};
+  if (base.processedFileId !== undefined) updateData.processedFileId = base.processedFileId;
+  if (base.pdfUrl !== undefined) updateData.pdfUrl = base.pdfUrl;
+  if (base.briefPdfPath !== undefined) updateData.briefPdfPath = base.briefPdfPath;
+  if (base.productStatusId !== undefined) updateData.productStatusId = base.productStatusId;
+  if (base.productTypeId !== undefined) updateData.productTypeId = base.productTypeId;
+  if (base.categoryId !== undefined) updateData.categoryId = base.categoryId;
+
   try {
     const row = await prisma.product.update({
       where: { id },
-      data: productToUpdateInput(data),
+      data: updateData,
+      include: { media: { orderBy: { order: "asc" } } },
     });
-    return dbToProduct(row as DbProduct);
+    if (Object.keys(fieldValues).length > 0) {
+      const categoryId = (row.categoryId ?? base.categoryId) as string | undefined;
+      if (categoryId?.trim()) {
+        const defs = await getFieldDefinitionsForCategory(categoryId.trim());
+        await upsertProductFieldValues(id, fieldValues, defs);
+      }
+    }
+    const loaded = await loadProductFieldValues(id);
+    const baseProduct = rowToBaseProduct(row as DbProductRow);
+    return mergeFieldValues(baseProduct, loaded);
   } catch {
     return null;
   }

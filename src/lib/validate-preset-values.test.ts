@@ -15,9 +15,13 @@ describe("validatePresetValuesForWidget", () => {
     expect(validatePresetValuesForWidget("not json", "select")).toBe("Некоректний JSON");
   });
 
-  it("validates select/radio/multiselect array", () => {
+  it("validates select/radio/multiselect array and object format", () => {
     expect(validatePresetValuesForWidget('[{"value":"a","label":"A"}]', "select")).toBeNull();
-    expect(validatePresetValuesForWidget('{"x":1}', "select")).toBe("Некоректний формат: очікується JSON масив");
+    expect(validatePresetValuesForWidget('{"layout":"row","options":[{"value":"a","label":"A"}]}', "radio")).toBeNull();
+    expect(validatePresetValuesForWidget('{"layout":"column","options":[{"value":"x"}]}', "multiselect")).toBeNull();
+    expect(validatePresetValuesForWidget('{"x":1}', "select")).toBe(
+      "Некоректний формат: очікується JSON масив або об'єкт { options: [...] }"
+    );
     expect(validatePresetValuesForWidget('[{"value":"","label":"X"}]', "select")).toBe(
       "Кожен елемент має містити непусте value"
     );

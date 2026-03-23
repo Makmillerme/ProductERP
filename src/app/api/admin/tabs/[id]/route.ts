@@ -100,9 +100,18 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (body.fields) {
         await tx.tabField.deleteMany({ where: { tabDefinitionId: id } });
 
-        if (body.fields.length > 0) {
+        const seen = new Map<string, TabFieldInput>();
+        for (const f of body.fields) {
+          const prev = seen.get(f.fieldDefinitionId);
+          if (!prev || (f.productTypeId && !prev.productTypeId)) {
+            seen.set(f.fieldDefinitionId, f);
+          }
+        }
+        const deduped = Array.from(seen.values());
+
+        if (deduped.length > 0) {
           await tx.tabField.createMany({
-            data: body.fields.map((f, idx) => ({
+            data: deduped.map((f, idx) => ({
               tabDefinitionId: id,
               fieldDefinitionId: f.fieldDefinitionId,
               productTypeId: f.productTypeId ?? null,
@@ -143,6 +152,12 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const tab = await prisma.tabDefinition.findUnique({ where: { id } });
     if (!tab) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (tab.isSystem) {
+      return NextResponse.json(
+        { error: "Cannot delete system tab" },
+        { status: 400 }
+      );
     }
 
     await prisma.tabDefinition.delete({ where: { id } });

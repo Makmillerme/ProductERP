@@ -26,7 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { NAV_MAIN, NAV_FOOTER } from "@/config";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/locale-provider";
-import { CalculatorDialog } from "@/features/vehicles/components/calculator-dialog";
+import { CalculatorDialog } from "@/features/products/components/calculator-dialog";
 import { CurrencyRatesHeader } from "@/features/currency";
 
 const ROUTE_TO_TITLE_KEY: Record<string, string> = Object.fromEntries([

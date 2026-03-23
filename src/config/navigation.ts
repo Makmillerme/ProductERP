@@ -31,6 +31,9 @@ export const NAV_MAIN: NavItem[] = [
     icon: SlidersHorizontal,
     items: [
       { titleKey: "layout.nav.dataModel", url: "/management/data-model" },
+      { titleKey: "layout.nav.display", url: "/management/display" },
+      { titleKey: "layout.nav.apiIntegrations", url: "/management/api-integrations" },
+      { titleKey: "layout.nav.automations", url: "/management/automations" },
       { titleKey: "layout.nav.users", url: "/management/users" },
     ],
   },

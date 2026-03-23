@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listProducts, createProduct } from "@/lib/products-db";
-import type { ProductFilterState } from "@/features/vehicles/types";
-import type { ProductColumnId } from "@/features/vehicles/types";
+import type { ProductFilterState } from "@/features/products/types";
+import type { ProductColumnId } from "@/features/products/types";
 
 export const dynamic = "force-dynamic";
 
@@ -15,15 +15,17 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(500, Math.max(1, parseInt(searchParams.get("pageSize") ?? "100", 10)));
     const categoryId = searchParams.get("categoryId") ?? null;
 
-    const filter: ProductFilterState = {
-      product_type: searchParams.get("filter_product_type") ?? "",
-      brand: searchParams.get("filter_brand") ?? "",
-      model: searchParams.get("filter_model") ?? "",
-      year_from: searchParams.get("filter_year_from") ?? "",
-      year_to: searchParams.get("filter_year_to") ?? "",
-      value_from: searchParams.get("filter_value_from") ?? "",
-      value_to: searchParams.get("filter_value_to") ?? "",
-    };
+    const filter: ProductFilterState = {};
+    for (const [key, value] of searchParams.entries()) {
+      if (key.startsWith("filter_") && value != null && value !== "") {
+        filter[key.slice(7)] = value;
+      }
+    }
+
+    const searchableFieldsRaw = searchParams.get("searchableFields") ?? "";
+    const searchableFieldCodes = searchableFieldsRaw
+      ? searchableFieldsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
 
     const result = await listProducts({
       search,
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest) {
       page,
       pageSize,
       categoryId: categoryId || undefined,
+      searchableFieldCodes,
     });
 
     return NextResponse.json(result, {
@@ -54,8 +57,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit id, created_at from client payload
     const { id, created_at, ...data } = body;
-    const payload_json = typeof data.payload_json === "string" ? data.payload_json : "{}";
-    const created = await createProduct({ ...data, payload_json });
+    const created = await createProduct(data);
     return NextResponse.json(created);
   } catch (e) {
     console.error("[POST /api/products]", e);

@@ -5,7 +5,7 @@
 
 import type { DataType, WidgetType } from "./field-constructor";
 
-export type CompositeLayout = "row" | "column" | "grid";
+export type CompositeLayout = "row" | "column";
 
 export type CompositeSubField = {
   code: string;
@@ -26,6 +26,8 @@ export type CompositePresetValues = {
   layout?: CompositeLayout;
   gridColumns?: number;
   gridRows?: number;
+  /** Приховати назву складеного поля для користувача на картці товару. */
+  hideLabel?: boolean;
   subFields: CompositeSubField[];
 };
 
@@ -93,7 +95,7 @@ export function parseCompositePresetValues(
       : [];
     return {
       layout:
-        obj.layout === "row" || obj.layout === "column" || obj.layout === "grid"
+        obj.layout === "row" || obj.layout === "column"
           ? obj.layout
           : "row",
       gridColumns:
@@ -104,6 +106,7 @@ export function parseCompositePresetValues(
         typeof obj.gridRows === "number" && obj.gridRows > 0
           ? obj.gridRows
           : 1,
+      hideLabel: obj.hideLabel === true,
       subFields,
     };
   } catch {

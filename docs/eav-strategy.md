@@ -1,51 +1,25 @@
 # Стратегія EAV (Entity-Attribute-Value)
 
 **Дата:** 2026-02-23  
-**Статус:** Визначено, реалізація — майбутня.
+**Статус:** План створено. Детальний план: `docs/plan-product-eav-refactor.md`.
 
 ---
 
-## Поточний стан
+## Рішення: ProductFieldValue (EAV)
 
-Поля з `!isSystem || !systemColumn` показують placeholder **«EAV (буде додано)»**.
+Обрано **ProductFieldValue** — існуюча таблиця в схемі. Реалізація за планом у `docs/plan-product-eav-refactor.md`.
 
-Користувач може створити довільне поле в «Модель даних», але воно не відображається на картці товару, доки не буде реалізовано збереження в EAV.
+### Маппінг dataType → колонка
 
----
+| dataType     | ProductFieldValue | Приклад           |
+|-------------|-------------------|-------------------|
+| string      | textValue         | "Текст"           |
+| integer, float | numericValue   | 123, 45.67        |
+| boolean     | textValue         | "true"/"false"    |
+| date, datetime | dateValue      | DateTime          |
+| composite, multiselect | textValue | JSON string       |
 
-## Варіанти реалізації
+### UI
 
-### Варіант A: JSON-колонка в Product
-- Додати `attributes_json` (JSONB) до Product.
-- Зберігати `{ [fieldCode]: value }`.
-- Плюси: проста схема, без нових таблиць.
-- Мінуси: складні запити, індекси по JSON.
-
-### Варіант B: Окрема таблиця ProductAttribute
-- `productId`, `fieldDefinitionId`, `value` (text).
-- Плюси: нормалізація, гнучкі запити.
-- Мінуси: більше JOIN, міграція.
-
-### Варіант C: payload_json
-- Використати існуючу колонку `payload_json` для кастомних полів.
-- Плюси: без змін схеми.
-- Мінуси: payload може мати інше призначення (парсер, імпорт).
-
----
-
-## Рекомендація
-
-**Короткостроково:** залишити placeholder. Не змінювати UI.
-
-**Довгостроково:** обрати Варіант A або B після узгодження з PM:
-- Якщо потрібен пошук/фільтр по кастомних полях — Варіант B.
-- Якщо достатньо зберігання та відображення — Варіант A.
-
----
-
-## UI при реалізації EAV
-
-Після впровадження:
-- Замість placeholder показувати відповідний віджет (text_input, select тощо).
-- `vehicleKey` для EAV-полів: використовувати `code` як ключ у `attributes_json` або в ProductAttribute.
-- Composite з EAV: `vehicleKey = code`, значення — JSON у attributes.
+- `code` (FieldDefinition) — ключ для читання/запису значень.
+- Без systemColumn: всі поля йдуть через EAV.

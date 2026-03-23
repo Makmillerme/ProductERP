@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/sidebar";
 import type { LucideIcon } from "lucide-react";
 
-type CategoryItem = { id: string; name: string; code: string; order: number };
+type CategoryItem = { id: string; name: string; order: number };
 
 async function fetchCategories(): Promise<CategoryItem[]> {
   const res = await fetch("/api/categories");

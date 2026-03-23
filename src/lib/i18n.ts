@@ -3,8 +3,7 @@
  * Підтримка uk та en. Локаль зберігається в cookie NEXT_LOCALE.
  */
 
-import uk from "@/config/locales/uk.json";
-import en from "@/config/locales/en.json";
+import { uk, en } from "@/config/locales";
 
 export type Locale = "uk" | "en";
 

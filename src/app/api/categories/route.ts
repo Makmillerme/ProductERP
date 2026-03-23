@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const categories = await prisma.category.findMany({
       orderBy: { order: "asc" },
-      select: { id: true, name: true, code: true, order: true },
+      select: { id: true, name: true, order: true },
     });
     return NextResponse.json({ categories });
   } catch (e) {

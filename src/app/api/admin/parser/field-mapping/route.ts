@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const exists = await prisma.fieldDefinition.findUnique({ where: { code } });
+      const exists = await prisma.fieldDefinition.findFirst({ where: { code } });
 
       if (exists) {
         existing.push(code);

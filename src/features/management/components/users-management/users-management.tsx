@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useLocale } from "@/lib/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,13 +39,16 @@ async function fetchRolesForSelect(): Promise<{ code: string; name: string }[]> 
   return [{ code: ADMIN_ROLE, name: ADMIN_LABEL }, ...fromApi];
 }
 
-function useUsersList(params: {
-  search: string;
-  sortBy: string;
-  sortDirection: "asc" | "desc";
-  limit: number;
-  offset: number;
-}) {
+function useUsersList(
+  params: {
+    search: string;
+    sortBy: string;
+    sortDirection: "asc" | "desc";
+    limit: number;
+    offset: number;
+  },
+  t: (key: string) => string
+) {
   return useQuery({
     queryKey: [...USERS_QUERY_KEY, params],
     queryFn: async () => {
@@ -61,7 +65,7 @@ function useUsersList(params: {
           sortDirection: params.sortDirection,
         },
       });
-      if (res.error) throw new Error(res.error.message ?? "Помилка завантаження");
+      if (res.error) throw new Error(res.error.message ?? t("errors.loadFailed"));
       const data = res.data as unknown as { users?: AdminUser[]; total?: number };
       return {
         users: data?.users ?? [],
@@ -75,6 +79,7 @@ function useUsersList(params: {
 }
 
 export function UsersManagement() {
+  const { t } = useLocale();
   const queryClient = useQueryClient();
   const { data: sessionData, isPending: sessionPending } = useSession();
   const { data: meData } = useQuery({
@@ -116,7 +121,7 @@ export function UsersManagement() {
     [search, sortBy, sortDirection, pageSize, offset]
   );
 
-  const { data, isLoading, isError, error, refetch } = useUsersList(listParams);
+  const { data, isLoading, isError, error, refetch } = useUsersList(listParams, t);
   const users = data?.users ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -173,20 +178,20 @@ export function UsersManagement() {
   const onSuccessBan = useCallback(() => {
     refetchList();
     setSelectedUser(null);
-    toast.success("Користувача заблоковано");
-  }, [refetchList]);
+    toast.success(t("toasts.userBanned"));
+  }, [refetchList, t]);
 
   const onSuccessUnban = useCallback(() => {
     refetchList();
     setSelectedUser(null);
-    toast.success("Користувача розблоковано");
-  }, [refetchList]);
+    toast.success(t("toasts.userUnbanned"));
+  }, [refetchList, t]);
 
   const onSuccessDelete = useCallback(() => {
     refetchList();
     setSelectedUser(null);
-    toast.success("Користувача видалено");
-  }, [refetchList]);
+    toast.success(t("toasts.userDeleted"));
+  }, [refetchList, t]);
 
   if (sessionPending) return null;
 
@@ -194,7 +199,7 @@ export function UsersManagement() {
     return (
       <div className="rounded-xl border border-muted/50 bg-card p-6 text-card-foreground">
         <p className="text-sm text-muted-foreground">
-          Для управління користувачами потрібна роль Адмін або Власник.
+          {t("users.requireAdmin")}
         </p>
       </div>
     );
@@ -210,7 +215,7 @@ export function UsersManagement() {
         <form onSubmit={handleSearchSubmit} className="relative min-w-0 flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Пошук по email, імені та прізвищу…"
+            placeholder={t("users.searchPlaceholder")}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="h-9 pl-9 bg-background"
@@ -219,7 +224,7 @@ export function UsersManagement() {
         <Button
           variant="outline"
           size="icon"
-          aria-label="Додати користувача"
+          aria-label={t("users.addUser")}
           onClick={() => {
             setCreateOpen(true);
             setSelectedUser(null);
@@ -232,12 +237,12 @@ export function UsersManagement() {
 
       {isError && (
         <p className="text-sm text-destructive">
-          {error instanceof Error ? error.message : "Помилка завантаження"}
+          {error instanceof Error ? error.message : t("errors.loadFailed")}
         </p>
       )}
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground py-8">Завантаження…</p>
+        <p className="text-sm text-muted-foreground py-8">{t("users.loading")}</p>
       ) : (
         <>
           <TableWithPagination
@@ -248,7 +253,7 @@ export function UsersManagement() {
                 variant="outline"
                 size="icon"
                 className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label="На початок"
+                aria-label={t("common.pagination.ariaFirstPage")}
                 disabled={!canPrev}
                 onClick={() => goToPage(1)}
               >
@@ -258,14 +263,14 @@ export function UsersManagement() {
                 variant="outline"
                 size="icon"
                 className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label="Попередня сторінка"
+                aria-label={t("common.pagination.ariaPrevPage")}
                 disabled={!canPrev}
                 onClick={() => goToPage(page - 1)}
               >
                 <ChevronLeft className="size-4" />
               </Button>
               <span className="flex items-center gap-1.5 px-2 text-sm text-muted-foreground">
-                Сторінка
+                {t("common.pagination.page")}
                 <Input
                   type="number"
                   min={1}
@@ -275,15 +280,15 @@ export function UsersManagement() {
                   onBlur={handlePageInputBlur}
                   onKeyDown={handlePageInputKeyDown}
                   className="h-8 w-14 text-center"
-                  aria-label="Номер сторінки"
+                  aria-label={t("common.pagination.ariaPageNumber")}
                 />
-                з {totalPages}
+                {t("common.pagination.pageOf")} {totalPages}
               </span>
               <Button
                 variant="outline"
                 size="icon"
                 className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label="Наступна сторінка"
+                aria-label={t("common.pagination.ariaNextPage")}
                 disabled={!canNext}
                 onClick={() => goToPage(page + 1)}
               >
@@ -293,7 +298,7 @@ export function UsersManagement() {
                 variant="outline"
                 size="icon"
                 className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label="В кінець"
+                aria-label={t("common.pagination.ariaLastPage")}
                 disabled={!canNext}
                 onClick={() => goToPage(totalPages)}
               >
@@ -301,14 +306,14 @@ export function UsersManagement() {
               </Button>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>Рядків на сторінці:</span>
+              <span>{t("common.pagination.rowsPerPage")}</span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
                     size="default"
                     className="gap-2 min-w-[4.5rem] justify-between"
-                    aria-label="Кількість рядків на сторінці"
+                    aria-label={t("common.pagination.ariaRowsPerPage")}
                   >
                     {pageSize}
                     <ChevronDown className="size-4 opacity-50" />
@@ -364,7 +369,7 @@ export function UsersManagement() {
         roleOptions={roleOptions}
         onSuccess={(isCreate) => {
           refetchList();
-          toast.success(isCreate ? "Користувача створено" : "Користувача оновлено");
+          toast.success(isCreate ? t("users.userCreated") : t("users.userUpdated"));
         }}
         onRequestBan={setBanUser}
         onRequestUnban={setUnbanUser}

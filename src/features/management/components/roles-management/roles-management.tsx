@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useLocale } from "@/lib/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Plus } from "lucide-react";
@@ -17,31 +18,36 @@ import type { ApiRoleListItem, ApiRoleDetail } from "./types";
 
 const ROLES_QUERY_KEY = ["admin", "roles"] as const;
 
-async function fetchRoles(): Promise<ApiRoleListItem[]> {
+type TFn = (key: string) => string;
+
+async function fetchRoles(t: TFn): Promise<ApiRoleListItem[]> {
   const res = await fetch("/api/roles");
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? "Помилка завантаження ролей");
+    throw new Error(data?.error ?? t("errors.loadFailed"));
   }
   const data = await res.json();
   return data.roles ?? [];
 }
 
-async function fetchRoleDetail(id: string): Promise<ApiRoleDetail> {
+async function fetchRoleDetail(id: string, t: TFn): Promise<ApiRoleDetail> {
   const res = await fetch(`/api/roles/${id}`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? "Помилка завантаження ролі");
+    throw new Error(data?.error ?? t("errors.loadFailed"));
   }
   return res.json();
 }
 
-async function createRole(body: {
-  name: string;
-  code: string;
-  description?: string | null;
-  permissions?: RolePermissionsMap;
-}) {
+async function createRole(
+  body: {
+    name: string;
+    code: string;
+    description?: string | null;
+    permissions?: RolePermissionsMap;
+  },
+  t: TFn
+) {
   const res = await fetch("/api/roles", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -52,7 +58,7 @@ async function createRole(body: {
     }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? "Помилка створення ролі");
+  if (!res.ok) throw new Error(data?.error ?? t("errors.createFailed"));
   const roleId = data.id;
   if (roleId && body.permissions && Object.keys(body.permissions).length > 0) {
     const patchRes = await fetch(`/api/roles/${roleId}`, {
@@ -61,14 +67,15 @@ async function createRole(body: {
       body: JSON.stringify({ permissions: body.permissions }),
     });
     const patchData = await patchRes.json().catch(() => ({}));
-    if (!patchRes.ok) throw new Error(patchData?.error ?? "Помилка збереження прав ролі");
+    if (!patchRes.ok) throw new Error(patchData?.error ?? t("errors.saveFailed"));
   }
   return data;
 }
 
 async function updateRole(
   id: string,
-  body: { name?: string; description?: string | null; permissions: RolePermissionsMap }
+  body: { name?: string; description?: string | null; permissions: RolePermissionsMap },
+  t: TFn
 ) {
   const res = await fetch(`/api/roles/${id}`, {
     method: "PATCH",
@@ -76,11 +83,12 @@ async function updateRole(
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? "Помилка збереження");
+  if (!res.ok) throw new Error(data?.error ?? t("errors.saveFailed"));
   return data;
 }
 
 export function RolesManagement() {
+  const { t } = useLocale();
   const { data: sessionData, isPending: sessionPending } = useSession();
   const isAdmin = sessionData?.user?.role === ADMIN_ROLE || sessionData?.user?.role === OWNER_ROLE;
   const queryClient = useQueryClient();
@@ -93,7 +101,7 @@ export function RolesManagement() {
 
   const { data: roles = [], isLoading, isError, error } = useQuery({
     queryKey: ROLES_QUERY_KEY,
-    queryFn: fetchRoles,
+    queryFn: () => fetchRoles(t),
     enabled: isAdmin,
   });
 
@@ -113,11 +121,11 @@ export function RolesManagement() {
       id: ADMIN_SYSTEM_ROLE_ID,
       name: ADMIN_LABEL,
       code: ADMIN_ROLE,
-      description: "Системна роль за замовчуванням. Має усі права.",
+      description: t("roles.systemRoleDefault"),
       createdAt: "",
       permissionsCount: TOTAL_PERMISSIONS_COUNT,
     }),
-    []
+    [t]
   );
 
   const adminRoleDetail: ApiRoleDetail = useMemo(
@@ -155,7 +163,7 @@ export function RolesManagement() {
     error: detailErrorObj,
   } = useQuery({
     queryKey: ["admin", "roles", selectedRoleId],
-    queryFn: () => fetchRoleDetail(selectedRoleId!),
+    queryFn: () => fetchRoleDetail(selectedRoleId!, t),
     enabled: isAdmin && !!selectedRoleId && selectedRoleId !== ADMIN_SYSTEM_ROLE_ID && !createOpen,
   });
 
@@ -174,22 +182,22 @@ export function RolesManagement() {
       : null;
 
   const createMutation = useMutation({
-    mutationFn: createRole,
+    mutationFn: (data: Parameters<typeof createRole>[0]) => createRole(data, t),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
-      toast.success("Роль створено");
+      toast.success(t("toasts.roleCreated"));
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Parameters<typeof updateRole>[1] }) =>
-      updateRole(id, body),
+      updateRole(id, body, t),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
       if (selectedRoleId) {
         queryClient.invalidateQueries({ queryKey: ["admin", "roles", selectedRoleId] });
       }
-      toast.success("Права збережено");
+      toast.success(t("toasts.permissionsSaved"));
     },
   });
 
@@ -233,7 +241,7 @@ export function RolesManagement() {
     return (
       <div className="rounded-xl border border-muted/50 bg-card p-6 text-card-foreground">
         <p className="text-sm text-muted-foreground">
-          Для управління ролями потрібна роль Адмін або Власник.
+          {t("roles.requireAdmin")}
         </p>
       </div>
     );
@@ -246,7 +254,7 @@ export function RolesManagement() {
         <form onSubmit={handleSearchSubmit} className="relative min-w-0 flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Пошук по назві, коду або опису…"
+            placeholder={t("roles.searchPlaceholder")}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="h-9 pl-9 bg-background"
@@ -255,7 +263,7 @@ export function RolesManagement() {
         <Button
           variant="outline"
           size="icon"
-          aria-label="Додати роль"
+          aria-label={t("roles.addRole")}
           onClick={openForCreate}
           className="shrink-0 size-9"
         >
@@ -265,12 +273,12 @@ export function RolesManagement() {
 
       {isError && (
         <p className="text-sm text-destructive">
-          {error instanceof Error ? error.message : "Помилка завантаження"}
+          {error instanceof Error ? error.message : t("errors.loadFailed")}
         </p>
       )}
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground py-8">Завантаження…</p>
+        <p className="text-sm text-muted-foreground py-8">{t("roles.loading")}</p>
       ) : (
         <TableWithPagination>
           <RolesTable

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { useLocale } from "@/lib/locale-provider";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -25,11 +26,7 @@ import {
 import { authClient } from "@/lib/auth-client";
 import type { AdminUser } from "./types";
 
-const BAN_DURATIONS = [
-  { value: "0", label: "Назавжди" },
-  { value: String(60 * 60 * 24 * 7), label: "1 тиждень" },
-  { value: String(60 * 60 * 24 * 30), label: "1 місяць" },
-] as const;
+const BAN_DURATION_VALUES = ["0", String(60 * 60 * 24 * 7), String(60 * 60 * 24 * 30)] as const;
 
 type BanUserDialogProps = {
   open: boolean;
@@ -44,8 +41,9 @@ export function BanUserDialog({
   user,
   onSuccess,
 }: BanUserDialogProps) {
+  const { t, tFormat } = useLocale();
   const [reason, setReason] = useState("");
-  const [expiresIn, setExpiresIn] = useState<string>(BAN_DURATIONS[0].value);
+  const [expiresIn, setExpiresIn] = useState<string>(BAN_DURATION_VALUES[0]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,7 +58,7 @@ export function BanUserDialog({
         banExpiresIn: expiresIn === "0" ? undefined : Number(expiresIn),
       });
       if (res.error) {
-        const msg = res.error.message ?? "Помилка блокування.";
+        const msg = res.error.message ?? t("errors.banFailed");
         setError(msg);
         toast.error(msg);
         return;
@@ -68,7 +66,7 @@ export function BanUserDialog({
       onSuccess();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Помилка блокування.");
+      setError(err instanceof Error ? err.message : t("errors.banFailed"));
     } finally {
       setLoading(false);
     }
@@ -80,25 +78,25 @@ export function BanUserDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Заблокувати користувача</AlertDialogTitle>
+          <AlertDialogTitle>{t("usersBan.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            Користувач {user.email} не зможе увійти. Всі його сесії будуть завершені.
+            {tFormat("usersBan.description", { email: user.email })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogBody className="gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="ban-reason">Причина (необовʼязково)</Label>
+            <Label htmlFor="ban-reason">{t("usersBan.reason")}</Label>
             <Textarea
               id="ban-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Причина блокування"
+              placeholder={t("usersBan.reasonPlaceholder")}
               rows={2}
               disabled={loading}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ban-expires">Термін</Label>
+            <Label htmlFor="ban-expires">{t("usersBan.expires")}</Label>
             <Select
               value={expiresIn}
               onValueChange={setExpiresIn}
@@ -108,11 +106,9 @@ export function BanUserDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {BAN_DURATIONS.map((d) => (
-                  <SelectItem key={d.value} value={d.value}>
-                    {d.label}
-                  </SelectItem>
-                ))}
+                <SelectItem value={BAN_DURATION_VALUES[0]}>{t("usersBan.forever")}</SelectItem>
+                <SelectItem value={BAN_DURATION_VALUES[1]}>{t("usersBan.week")}</SelectItem>
+                <SelectItem value={BAN_DURATION_VALUES[2]}>{t("usersBan.month")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -121,7 +117,7 @@ export function BanUserDialog({
           )}
         </AlertDialogBody>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>Скасувати</AlertDialogCancel>
+          <AlertDialogCancel disabled={loading}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault();
@@ -130,7 +126,7 @@ export function BanUserDialog({
             disabled={loading}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {loading ? "Блокування…" : "Заблокувати"}
+            {loading ? t("usersBan.actioning") : t("usersBan.action")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

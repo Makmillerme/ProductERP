@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { useQueryState } from "nuqs";
+import { useLocale } from "@/lib/locale-provider";
 import { useSearchParams } from "next/navigation";
 import {
   Card,
@@ -12,9 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UsersManagement } from "./users-management";
 import { RolesManagement } from "./roles-management";
-import { VehiclesConfig } from "./vehicles-config";
+import { ProductsConfig } from "./products-config";
 
-const MANAGEMENT_TABS = ["uploader", "vehicles", "users"] as const;
+const MANAGEMENT_TABS = ["uploader", "products", "users"] as const;
 type ManagementTab = (typeof MANAGEMENT_TABS)[number];
 
 const USER_SUBTABS = ["users", "roles"] as const;
@@ -23,11 +24,14 @@ type UserSubtab = (typeof USER_SUBTABS)[number];
 const STORAGE_KEY = "management-tab";
 
 export function ManagementPage() {
+  const { t } = useLocale();
   const searchParams = useSearchParams();
   const [tab, setTab] = useQueryState("tab", {
     defaultValue: "uploader",
-    parse: (v) =>
-      MANAGEMENT_TABS.includes(v as ManagementTab) ? (v as ManagementTab) : "uploader",
+    parse: (v) => {
+      if (v === "vehicles") return "products" as ManagementTab; // backward compat
+      return MANAGEMENT_TABS.includes(v as ManagementTab) ? (v as ManagementTab) : "uploader";
+    },
     serialize: (v) => v,
   });
   const [subtab, setSubtab] = useQueryState("subtab", {
@@ -44,9 +48,10 @@ export function ManagementPage() {
     const tabInUrl = searchParams.get("tab");
     if (tabInUrl && MANAGEMENT_TABS.includes(tabInUrl as ManagementTab)) return;
     const saved = typeof window !== "undefined" ? sessionStorage.getItem(STORAGE_KEY) : null;
-    if (saved && MANAGEMENT_TABS.includes(saved as ManagementTab)) {
+    const resolved = saved === "vehicles" ? "products" : saved; // backward compat
+    if (resolved && MANAGEMENT_TABS.includes(resolved as ManagementTab)) {
       hasRestoredRef.current = true;
-      setTab(saved as ManagementTab);
+      setTab(resolved as ManagementTab);
     }
   }, [searchParams, setTab]);
 
@@ -71,13 +76,13 @@ export function ManagementPage() {
     >
       <TabsList variant="line" className="w-full shrink-0">
         <TabsTrigger value="uploader" className="flex-1 min-w-0 text-xs sm:text-sm">
-          Завантажувач
+          {t("management.tabs.uploader")}
         </TabsTrigger>
-        <TabsTrigger value="vehicles" className="flex-1 min-w-0 text-xs sm:text-sm">
-          Облік авто
+        <TabsTrigger value="products" className="flex-1 min-w-0 text-xs sm:text-sm">
+          {t("management.tabs.products")}
         </TabsTrigger>
         <TabsTrigger value="users" className="flex-1 min-w-0 text-xs sm:text-sm">
-          Користувачі та Ролі
+          {t("management.tabs.users")}
         </TabsTrigger>
       </TabsList>
 
@@ -86,35 +91,35 @@ export function ManagementPage() {
           <Card>
             <CardContent className="flex flex-col gap-4 pt-6">
               <p className="text-sm text-muted-foreground">
-                Швидкі періоди: останні 7 днів, 30 днів або поточний місяць. Або вкажіть власний діапазон дат.
+                {t("management.uploader.quickPeriods")}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button variant="default" disabled>
-                  7 днів
+                  {t("management.uploader.days7")}
                 </Button>
                 <Button variant="default" disabled>
-                  30 днів
+                  {t("management.uploader.days30")}
                 </Button>
                 <Button variant="default" disabled>
-                  Поточний місяць
+                  {t("management.uploader.currentMonth")}
                 </Button>
                 <Button variant="outline" disabled>
-                  Свій діапазон
+                  {t("management.uploader.customRange")}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                API та бекенд пайплайну підключаться пізніше.
+                {t("management.uploader.apiComingSoon")}
               </p>
             </CardContent>
             <CardFooter>
-              <Button disabled>Запустити завантаження</Button>
+              <Button disabled>{t("management.uploader.runUpload")}</Button>
             </CardFooter>
           </Card>
         </div>
       </TabsContent>
 
-      <TabsContent value="vehicles" className="mt-3 flex-1 overflow-auto p-2 data-[state=inactive]:hidden md:mt-4 md:p-3">
-        <VehiclesConfig />
+      <TabsContent value="products" className="mt-3 flex-1 overflow-auto p-2 data-[state=inactive]:hidden md:mt-4 md:p-3">
+        <ProductsConfig />
       </TabsContent>
 
       <TabsContent value="users" className="mt-3 flex-1 overflow-auto p-2 data-[state=inactive]:hidden md:mt-4 md:p-3">
@@ -125,10 +130,10 @@ export function ManagementPage() {
         >
           <TabsList variant="line" className="w-full shrink-0 max-w-xs">
             <TabsTrigger value="users" className="min-w-0 text-xs sm:text-sm">
-              Користувачі
+              {t("management.tabs.usersTab")}
             </TabsTrigger>
             <TabsTrigger value="roles" className="min-w-0 text-xs sm:text-sm">
-              Ролі
+              {t("management.tabs.rolesTab")}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="users" className="mt-3 flex-1 overflow-auto p-2 data-[state=inactive]:hidden md:mt-4 md:p-3">
