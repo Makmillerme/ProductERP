@@ -39,8 +39,13 @@ export function SelectField({
       : options;
 
   if (opts.length === 0) {
+    const unconfigured = "__unconfigured__";
     return (
-      <div className="grid gap-2">
+      <div
+        className={cn(
+          "grid min-w-0 w-full max-w-full gap-2",
+        )}
+      >
         <Label
           className={cn(
             compact && "text-xs font-normal text-muted-foreground",
@@ -48,18 +53,30 @@ export function SelectField({
         >
           {label}
         </Label>
-        <Select value="" disabled>
-          <SelectTrigger className={cn(compact && "min-w-0", "w-full")}>
+        <Select value={unconfigured} onValueChange={() => {}}>
+          <SelectTrigger
+            className={cn(
+              compact && "min-w-0",
+              "w-full min-w-0 max-w-full overflow-hidden [&>span]:truncate",
+            )}
+          >
             <SelectValue placeholder={t("dynamicField.configureOptions")} />
           </SelectTrigger>
-          <SelectContent />
+          <SelectContent className="max-w-[min(var(--radix-select-trigger-width),100%)]">
+            <SelectItem
+              value={unconfigured}
+              className="whitespace-normal text-muted-foreground focus:text-muted-foreground"
+            >
+              {t("dynamicField.configureOptions")}
+            </SelectItem>
+          </SelectContent>
         </Select>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 w-full max-w-full gap-2">
       <Label
         className={cn(
           compact && "text-xs font-normal text-muted-foreground",
@@ -72,7 +89,12 @@ export function SelectField({
         onValueChange={(v) => onChange(v || null)}
         disabled={disabled}
       >
-        <SelectTrigger className={cn(compact && "min-w-0", "w-full")}>
+        <SelectTrigger
+          className={cn(
+            compact && "min-w-0",
+            "w-full min-w-0 max-w-full overflow-hidden [&>span]:truncate",
+          )}
+        >
           <SelectValue placeholder={resolvedPlaceholder} />
         </SelectTrigger>
         <SelectContent>

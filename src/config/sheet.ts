@@ -36,6 +36,13 @@ export const SHEET_FIELD_GAP = "gap-2";
 /** Відступи між табами в sheet */
 export const SHEET_TABS_GAP = "gap-3";
 
+/**
+ * Тригери вкладок у sheet (картка товару, профіль тощо): однакові мін/макс ширини й без `flex-1`,
+ * щоб ряд табів мав передбачувану ширину і горизонтально скролився в `ScrollableTabsList`.
+ */
+export const SHEET_TAB_TRIGGER_CLASS =
+  "w-[7rem] min-w-[7rem] max-w-[7rem] shrink-0 flex-none overflow-visible text-xs sm:text-sm";
+
 /** Відступ зверху TabsContent від TabsList */
 export const SHEET_TABS_CONTENT_MT = "mt-3";
 

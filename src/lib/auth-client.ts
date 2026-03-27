@@ -10,6 +10,9 @@ export const authClient = createAuthClient({
     magicLinkClient(),
     adminClient(),
   ],
+  sessionOptions: {
+    refetchOnWindowFocus: false,
+  },
 });
 
 export const { signIn, signOut, useSession } = authClient;

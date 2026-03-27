@@ -20,51 +20,40 @@ import {
   stringifyDisplayConfig,
   type CategoryDisplayConfig,
 } from "../types/display-config";
-import { useListConfig } from "@/features/products/hooks/use-list-config";
-import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
+import {
+  useListConfig,
+  listConfigQueryKeys,
+} from "@/features/products/hooks/use-list-config";
+import { MANAGEMENT_STALE_MS, managementAdminKeys } from "@/lib/query-keys";
+import { fetchAdminCategories } from "@/lib/api/admin/catalog";
+import { adminGetJson, adminMutationJson } from "@/lib/api/admin/client";
 import { toast } from "sonner";
-
-const CATEGORIES_KEY = ["admin", "categories"] as const;
 
 type CategoryWithCount = { id: string; name: string; order: number };
 
-async function fetchCategories(t: (key: string) => string): Promise<CategoryWithCount[]> {
-  const res = await fetch("/api/admin/categories");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadCategoriesFailed"));
-  }
-  const data = await res.json();
-  const cats = data.categories ?? data ?? [];
-  return Array.isArray(cats) ? cats : [];
-}
-
-async function fetchDisplayConfig(categoryId: string): Promise<CategoryDisplayConfig> {
-  const res = await fetch(`/api/admin/display-config?categoryId=${encodeURIComponent(categoryId)}`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error ?? "Failed to load display config");
-  }
-  return res.json();
+async function fetchDisplayConfig(
+  categoryId: string,
+  t: (key: string) => string
+): Promise<CategoryDisplayConfig> {
+  return adminGetJson<CategoryDisplayConfig>(
+    `/display-config?categoryId=${encodeURIComponent(categoryId)}`,
+    t("errors.loadFailed")
+  );
 }
 
 async function saveDisplayConfig(
   categoryId: string,
-  config: CategoryDisplayConfig
+  config: CategoryDisplayConfig,
+  t: (key: string) => string
 ): Promise<CategoryDisplayConfig> {
-  const res = await fetch("/api/admin/display-config", {
+  return adminMutationJson<CategoryDisplayConfig>("/display-config", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ categoryId, config }),
+    body: { categoryId, config },
+    fallbackError: t("errors.saveFailed"),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error ?? "Failed to save");
-  }
-  return res.json();
 }
 
-const DISPLAY_CONFIG_KEYS = ["list-config"] as const;
+const DISPLAY_CONFIG_KEYS = listConfigQueryKeys.all;
 
 export function DisplaySettingsManagement() {
   const { t } = useLocale();
@@ -72,8 +61,8 @@ export function DisplaySettingsManagement() {
   const [categoryId, setCategoryId] = useState("");
 
   const { data: categories = [] } = useQuery({
-    queryKey: [...CATEGORIES_KEY],
-    queryFn: () => fetchCategories(t),
+    queryKey: [...managementAdminKeys.categories],
+    queryFn: () => fetchAdminCategories(t) as Promise<CategoryWithCount[]>,
     staleTime: MANAGEMENT_STALE_MS,
   });
 
@@ -87,7 +76,7 @@ export function DisplaySettingsManagement() {
   const { listConfig } = useListConfig(effectiveCategoryId);
   const { data: displayConfigData } = useQuery({
     queryKey: [...DISPLAY_CONFIG_KEYS, "display", effectiveCategoryId],
-    queryFn: () => fetchDisplayConfig(effectiveCategoryId),
+    queryFn: () => fetchDisplayConfig(effectiveCategoryId, t),
     enabled: !!effectiveCategoryId,
     staleTime: 60 * 1000,
   });
@@ -105,12 +94,19 @@ export function DisplaySettingsManagement() {
   }, [displayConfigData]);
 
   const saveMutation = useMutation({
-    mutationFn: () => saveDisplayConfig(effectiveCategoryId, localConfig),
-    onSuccess: (data) => {
+    mutationFn: async () => {
+      const catId = effectiveCategoryId;
+      const data = await saveDisplayConfig(catId, localConfig, t);
+      return { data, categoryId: catId };
+    },
+    onSuccess: ({ data, categoryId }) => {
       setLocalConfig(data);
-      queryClient.invalidateQueries({ queryKey: DISPLAY_CONFIG_KEYS });
+      queryClient.setQueryData(
+        [...DISPLAY_CONFIG_KEYS, "display", categoryId],
+        data
+      );
       queryClient.invalidateQueries({
-        queryKey: ["list-config", effectiveCategoryId],
+        queryKey: listConfigQueryKeys.category(categoryId),
       });
       toast.success(t("toasts.changesSaved"));
     },

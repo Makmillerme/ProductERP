@@ -47,16 +47,7 @@ import {
 } from "@/features/products/lib/field-utils";
 import { OptionsEditor } from "./options-editor";
 import { FormulaEditor } from "./formula-editor";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
 import {
   Collapsible,
   CollapsibleContent,
@@ -777,36 +768,24 @@ export function CompositeSubFieldsEditor({
         )}
       </div>
 
-      <AlertDialog
+      <ConfirmDestructiveDialog
         open={deleteIndex != null}
         onOpenChange={(open) => !open && setDeleteIndex(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("composite.deleteConfirmTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {subfieldToDelete
-                ? tFormat("composite.deleteConfirmDescription", {
-                    label: subfieldToDelete.label,
-                    code: subfieldToDelete.code,
-                  })
-                : t("composite.deleteConfirmFallback")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("composite.cancelButton")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                if (deleteIndex != null) removeSubField(deleteIndex);
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {t("composite.deleteButton")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={t("composite.deleteConfirmTitle")}
+        description={
+          subfieldToDelete
+            ? tFormat("composite.deleteConfirmDescription", {
+                label: subfieldToDelete.label,
+                code: subfieldToDelete.code,
+              })
+            : t("composite.deleteConfirmFallback")
+        }
+        cancelLabel={t("composite.cancelButton")}
+        confirmLabel={t("composite.deleteButton")}
+        onConfirm={() => {
+          if (deleteIndex != null) removeSubField(deleteIndex);
+        }}
+      />
     </div>
   );
 }

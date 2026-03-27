@@ -3,17 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/locale-provider";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogBody,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
 import { authClient } from "@/lib/auth-client";
 import type { AdminUser } from "./types";
 
@@ -60,26 +50,18 @@ export function UnbanUserDialog({
   if (!user) return null;
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t("usersUnban.title")}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {tFormat("usersUnban.description", { email: user.email })}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && (
-          <AlertDialogBody>
-            <p className="text-sm text-destructive">{error}</p>
-          </AlertDialogBody>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm} disabled={loading}>
-            {loading ? t("usersUnban.actioning") : t("usersUnban.action")}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDestructiveDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t("usersUnban.title")}
+      description={tFormat("usersUnban.description", { email: user.email })}
+      errorMessage={error}
+      cancelLabel={t("productsConfig.common.cancel")}
+      confirmLabel={t("usersUnban.action")}
+      confirmPendingLabel={t("usersUnban.actioning")}
+      confirmPending={loading}
+      confirmTone="default"
+      onConfirm={handleConfirm}
+    />
   );
 }

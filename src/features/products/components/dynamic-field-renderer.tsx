@@ -498,10 +498,7 @@ export function DynamicFieldRenderer({
     hiddenOnCard,
   } = fieldDefinition;
 
-  if (
-    (widgetType === "number_input" || widgetType === "calculated") &&
-    hiddenOnCard
-  ) {
+  if (hiddenOnCard) {
     return null;
   }
 

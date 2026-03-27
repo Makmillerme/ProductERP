@@ -73,7 +73,7 @@
 
 | Область | Дія |
 |---------|-----|
-| Prisma schema | `isSystem`, `systemColumn` — залишити для сумісності з parser/import. Не видаляти. |
+| Prisma schema | `isSystem`, `systemColumn` — залишити. Не видаляти. |
 | API | Продовжувати повертати `isSystem` — не ламати існуючі клієнти. |
 | dynamic-field-renderer | Логіка `isSystem && systemColumn` для мапінгу на Product — залишити. |
 

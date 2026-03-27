@@ -26,6 +26,7 @@ interface TabFieldInput {
   colSpan?: number;
   isRequired?: boolean;
   sectionTitle?: string | null;
+  stretchInRow?: boolean;
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -45,7 +46,27 @@ export async function GET(request: Request, context: RouteContext) {
             ? { OR: [{ productTypeId: null }, { productTypeId }] }
             : undefined,
           orderBy: { order: "asc" },
-          include: { fieldDefinition: true },
+          include: {
+            fieldDefinition: {
+              select: {
+                id: true,
+                code: true,
+                label: true,
+                dataType: true,
+                widgetType: true,
+                isSystem: true,
+                systemColumn: true,
+                presetValues: true,
+                validation: true,
+                unit: true,
+                defaultValue: true,
+                placeholder: true,
+                hiddenOnCard: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
         },
       },
     });
@@ -119,6 +140,7 @@ export async function PATCH(request: Request, context: RouteContext) {
               colSpan: f.colSpan ?? 1,
               isRequired: f.isRequired ?? false,
               sectionTitle: f.sectionTitle ?? null,
+              stretchInRow: f.stretchInRow ?? false,
             })),
           });
         }
@@ -129,7 +151,27 @@ export async function PATCH(request: Request, context: RouteContext) {
         include: {
           fields: {
             orderBy: { order: "asc" },
-            include: { fieldDefinition: true },
+            include: {
+              fieldDefinition: {
+                select: {
+                  id: true,
+                  code: true,
+                  label: true,
+                  dataType: true,
+                  widgetType: true,
+                  isSystem: true,
+                  systemColumn: true,
+                  presetValues: true,
+                  validation: true,
+                  unit: true,
+                  defaultValue: true,
+                  placeholder: true,
+                  hiddenOnCard: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+              },
+            },
           },
         },
       });

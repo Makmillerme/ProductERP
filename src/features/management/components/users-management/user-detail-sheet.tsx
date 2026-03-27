@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/locale-provider";
 import {
@@ -30,17 +31,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
+import { adminMutationJson } from "@/lib/api/admin/client";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { SHEET_CONTENT_CLASS, SHEET_INPUT_CLASS, SHEET_HEADER_CLASS, SHEET_BODY_CLASS, SHEET_FOOTER_CLASS, SHEET_TABS_GAP, SHEET_TABS_CONTENT_MT, SHEET_SCROLL_CLASS, SHEET_FORM_PADDING } from "@/config/sheet";
+  SHEET_CONTENT_CLASS,
+  SHEET_INPUT_CLASS,
+  SHEET_HEADER_CLASS,
+  SHEET_BODY_CLASS,
+  SHEET_FOOTER_CLASS,
+  SHEET_TAB_TRIGGER_CLASS,
+  SHEET_TABS_GAP,
+  SHEET_TABS_CONTENT_MT,
+  SHEET_SCROLL_CLASS,
+  SHEET_FORM_PADDING,
+} from "@/config/sheet";
 import { cn } from "@/lib/utils";
 import { ADMIN_ROLE, getRoleLabel, type RoleCode } from "@/config/roles";
 import { authClient } from "@/lib/auth-client";
@@ -96,6 +100,7 @@ export function UserDetailSheet({
   onRequestDelete,
   onTransferSuccess,
 }: UserDetailSheetProps) {
+  const queryClient = useQueryClient();
   const { t, tFormat } = useLocale();
   const [activeTab, setActiveTab] = useState<"profile" | "sessions">(initialTab);
   const [name, setName] = useState("");
@@ -188,27 +193,23 @@ export function UserDetailSheet({
       }
       setSaving(true);
       try {
-        const res = await fetch("/api/admin/users", {
+        await adminMutationJson("/users", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: {
             email: trimmedEmail,
             password: createPassword,
             name: trimmedName,
             role,
             ...(lastName.trim() && { lastName: lastName.trim() }),
-          }),
+          },
+          fallbackError: t("errors.createFailed"),
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setError(data?.error ?? t("errors.createFailed"));
-          toast.error(data?.error);
-          return;
-        }
         onSuccess(true);
         onOpenChange(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : t("errors.createFailed"));
+        const msg = err instanceof Error ? err.message : t("errors.createFailed");
+        setError(msg);
+        toast.error(msg);
       } finally {
         setSaving(false);
       }
@@ -244,17 +245,11 @@ export function UserDetailSheet({
         return;
       }
       if (canChangeRole) {
-        const roleRes = await fetch(`/api/admin/users/${user.id}/set-role`, {
+        await adminMutationJson(`/users/${user.id}/set-role`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role }),
+          body: { role },
+          fallbackError: t("users.roleChangeFailed"),
         });
-        const roleData = await roleRes.json().catch(() => ({}));
-        if (!roleRes.ok) {
-          setError(roleData?.error ?? t("users.roleChangeFailed"));
-          toast.error(roleData?.error);
-          return;
-        }
       }
       if (wantPassword) {
         const pwdRes = await authClient.admin.setUserPassword({
@@ -266,6 +261,9 @@ export function UserDetailSheet({
           toast.error(pwdRes.error.message);
           return;
         }
+      }
+      if (user.id === currentUserId) {
+        void queryClient.invalidateQueries({ queryKey: ["me"] });
       }
       onSuccess(false);
       onOpenChange(false);
@@ -302,6 +300,9 @@ export function UserDetailSheet({
         return;
       }
       setSessions([]);
+      if (user.id === currentUserId) {
+        void queryClient.invalidateQueries({ queryKey: ["me"] });
+      }
       onSuccess();
     } finally {
       setRevoking(null);
@@ -312,20 +313,17 @@ export function UserDetailSheet({
     if (!user) return;
     setTransferLoading(true);
     try {
-      const res = await fetch("/api/admin/owner/transfer", {
+      await adminMutationJson("/owner/transfer", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newOwnerUserId: user.id }),
+        body: { newOwnerUserId: user.id },
+        fallbackError: t("errors.transferFailed"),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data?.error ?? t("errors.transferFailed"));
-        return;
-      }
       onTransferSuccess?.();
       onOpenChange(false);
       setTransferDialogOpen(false);
       toast.success(t("toasts.ownerTransferred"));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("errors.transferFailed"));
     } finally {
       setTransferLoading(false);
     }
@@ -354,12 +352,12 @@ export function UserDetailSheet({
             className={cn("flex min-h-0 flex-1 flex-col", SHEET_TABS_GAP)}
           >
             <ScrollableTabsList variant="line">
-              <TabsTrigger value="profile" className="flex-1 min-w-0 shrink-0 text-xs sm:text-sm">
-                {t("users.profile")}
+              <TabsTrigger value="profile" className={SHEET_TAB_TRIGGER_CLASS}>
+                <span className="min-w-0 truncate">{t("users.profile")}</span>
               </TabsTrigger>
               {!isCreate && (
-                <TabsTrigger value="sessions" className="flex-1 min-w-0 shrink-0 text-xs sm:text-sm">
-                  {t("users.sessions")}
+                <TabsTrigger value="sessions" className={SHEET_TAB_TRIGGER_CLASS}>
+                  <span className="min-w-0 truncate">{t("users.sessions")}</span>
                 </TabsTrigger>
               )}
             </ScrollableTabsList>
@@ -623,28 +621,19 @@ export function UserDetailSheet({
         </SheetFooter>
       </SheetContent>
       {canTransferOwnership && user && (
-        <AlertDialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("users.transferOwnerTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {tFormat("users.transferOwnerDesc", { email: user.email })}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={transferLoading}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleTransferOwnership();
-                }}
-                disabled={transferLoading}
-              >
-                {transferLoading ? t("users.transferring") : t("users.transfer")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDestructiveDialog
+          open={transferDialogOpen}
+          onOpenChange={setTransferDialogOpen}
+          title={t("users.transferOwnerTitle")}
+          description={tFormat("users.transferOwnerDesc", { email: user.email })}
+          cancelLabel={t("productsConfig.common.cancel")}
+          confirmLabel={t("users.transfer")}
+          confirmPendingLabel={t("users.transferring")}
+          confirmPending={transferLoading}
+          cancelDisabled={transferLoading}
+          confirmTone="default"
+          onConfirm={handleTransferOwnership}
+        />
       )}
     </Sheet>
   );

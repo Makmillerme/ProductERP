@@ -15,10 +15,6 @@
     {
       "id": "admin",
       "titleKey": "apiDocs.sections.admin"
-    },
-    {
-      "id": "parser",
-      "titleKey": "apiDocs.sections.parser"
     }
   ],
   "endpoints": {
@@ -78,28 +74,6 @@
         "method": "GET",
         "path": "/api/admin/product-types",
         "descriptionKey": "apiDocs.admin.productTypes"
-      }
-    ],
-    "parser": [
-      {
-        "method": "POST",
-        "path": "/api/admin/parser/import",
-        "descriptionKey": "apiDocs.parser.import"
-      },
-      {
-        "method": "GET",
-        "path": "/api/admin/parser/field-mapping",
-        "descriptionKey": "apiDocs.parser.fieldMappingGet"
-      },
-      {
-        "method": "POST",
-        "path": "/api/admin/parser/field-mapping",
-        "descriptionKey": "apiDocs.parser.fieldMappingPost"
-      },
-      {
-        "method": "POST",
-        "path": "/api/admin/parser/auto-detect-types",
-        "descriptionKey": "apiDocs.parser.autoDetect"
       }
     ]
   }

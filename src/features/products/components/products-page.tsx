@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+  type CSSProperties,
+} from "react";
 import { useQueryState } from "nuqs";
 import { useIsRestoring, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -44,14 +51,13 @@ import {
   ArrowUp,
   ArrowDown,
   Plus,
-  ChevronsLeft,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsRight,
   Inbox,
 } from "lucide-react";
 import {
   TABLE_COLUMN_MAX_WIDTH,
+  TABLE_COLUMN_MIN_WIDTH,
+  TABLE_INDEX_COLUMN_MAX_WIDTH,
+  TABLE_INDEX_COLUMN_MIN_WIDTH,
   type Product,
   type ProductColumnConfig,
   type ProductColumnId,
@@ -60,6 +66,8 @@ import {
 import { useListConfig } from "../hooks/use-list-config";
 import { useStatuses } from "../hooks/use-statuses";
 import { TableWithPagination } from "@/components/table-with-pagination";
+import { TablePaginationBar } from "@/components/table-pagination-bar";
+import { ManagementListLoading } from "@/components/management-list-states";
 import {
   Select,
   SelectContent,
@@ -67,6 +75,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { ProductDetailSheet } from "./product-detail-sheet";
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, refetchProductsLists, productsKeys } from "../queries";
 import { formatDateForDisplay, formatDateTimeForDisplay } from "../lib/field-utils";
@@ -149,6 +158,20 @@ function formatCell(
   }
   return String(value);
 }
+
+function productListDataColumnStyle(col: ProductColumnConfig): CSSProperties {
+  return {
+    minWidth: col.minWidth ?? TABLE_COLUMN_MIN_WIDTH,
+    maxWidth: TABLE_COLUMN_MAX_WIDTH,
+    verticalAlign: "middle",
+  };
+}
+
+const indexColumnStyle: CSSProperties = {
+  minWidth: TABLE_INDEX_COLUMN_MIN_WIDTH,
+  maxWidth: TABLE_INDEX_COLUMN_MAX_WIDTH,
+  verticalAlign: "middle",
+};
 
 type ProductsPageProps = {
   /** Фільтр по категорії (для /catalog/[categoryId]) */
@@ -353,8 +376,6 @@ function ProductsTableView({ categoryId }: { categoryId?: string | null } = {}) 
 
   /** Дані вже відфільтровані та відсортовані з бекенду. */
   const totalPages = Math.max(1, Math.ceil(total / pageSizeClamped));
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
 
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize);
@@ -652,114 +673,36 @@ function ProductsTableView({ categoryId }: { categoryId?: string | null } = {}) 
 
       <TableWithPagination
         pagination={
-          <>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label={t("common.pagination.ariaFirstPage")}
-                disabled={(!mounted ? true : !canPrev) || (mounted && loading)}
-                onClick={() => goToPage(1)}
-              >
-                <ChevronsLeft className="size-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label={t("common.pagination.ariaPrevPage")}
-                disabled={(!mounted ? true : !canPrev) || (mounted && loading)}
-                onClick={() => goToPage(page - 1)}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <span className="flex items-center gap-1.5 px-2 text-sm text-muted-foreground">
-                {t("common.pagination.page")}
-                <Input
-                  type="number"
-                  min={1}
-                  max={mounted ? totalPages : 1}
-                  value={mounted ? pageInputValue : "1"}
-                  onChange={(e) => setPageInputValue(e.target.value)}
-                  onBlur={handlePageInputBlur}
-                  onKeyDown={handlePageInputKeyDown}
-                  className="h-8 w-14 text-center"
-                  aria-label={t("common.pagination.ariaPageNumber")}
-                />
-                {t("common.pagination.pageOf")} {mounted ? totalPages : 1}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label={t("common.pagination.ariaNextPage")}
-                disabled={(!mounted ? true : !canNext) || (mounted && loading)}
-                onClick={() => goToPage(page + 1)}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label={t("common.pagination.ariaLastPage")}
-                disabled={(!mounted ? true : !canNext) || (mounted && loading)}
-                onClick={() => goToPage(totalPages)}
-              >
-                <ChevronsRight className="size-4" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{t("common.pagination.rowsPerPage")}</span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="default"
-                    className="gap-2 min-w-[4.5rem] justify-between"
-                    disabled={mounted && loading}
-                    aria-label={t("common.pagination.ariaRowsPerPage")}
-                  >
-                    {mounted ? pageSizeClamped : DEFAULT_PAGE_SIZE}
-                    <ChevronDown className="size-4 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[4.5rem]">
-                  <DropdownMenuRadioGroup
-                    value={String(mounted ? pageSizeClamped : DEFAULT_PAGE_SIZE)}
-                    onValueChange={(v) => handlePageSizeChange(Number(v))}
-                  >
-                    {PAGE_SIZES.map((n) => (
-                      <DropdownMenuRadioItem key={n} value={String(n)}>
-                        {n}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            </>
-          }
+          <TablePaginationBar
+            page={page}
+            totalPages={totalPages}
+            pageInputValue={pageInputValue}
+            onPageInputChange={setPageInputValue}
+            onPageInputBlur={handlePageInputBlur}
+            onPageInputKeyDown={handlePageInputKeyDown}
+            goToPage={goToPage}
+            pageSize={mounted ? pageSizeClamped : DEFAULT_PAGE_SIZE}
+            pageSizes={PAGE_SIZES}
+            onPageSizeChange={handlePageSizeChange}
+            isReady={mounted}
+            isLoading={loading}
+          />
+        }
         >
-        <Table className={items.length === 0 ? "w-full" : "w-max"}>
+        <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead
-                  className="h-11 px-3 text-center align-middle"
-                  style={{ minWidth: "3.5rem", maxWidth: TABLE_COLUMN_MAX_WIDTH, verticalAlign: "middle" }}
-                >
+                <TableHead className="h-11 px-3 text-left align-middle" style={indexColumnStyle}>
                   №
                 </TableHead>
                 {visibleColumns.map((col) => (
                   <TableHead
                     key={col.id}
-                    className="h-11 px-3 text-center align-middle"
-                    style={{
-                      minWidth: col.minWidth ?? undefined,
-                      maxWidth: TABLE_COLUMN_MAX_WIDTH,
-                      verticalAlign: "middle",
-                    }}
+                    className={cn(
+                      "h-11 px-3 align-middle",
+                      col.align === "right" ? "text-right" : "text-left",
+                    )}
+                    style={productListDataColumnStyle(col)}
                   >
                     {col.label}
                   </TableHead>
@@ -803,7 +746,10 @@ function ProductsTableView({ categoryId }: { categoryId?: string | null } = {}) 
                     colSpan={visibleColumns.length + 1}
                     className="h-24 align-middle text-center text-muted-foreground"
                   >
-                    <span className="inline-block py-8">{t("users.loading")}</span>
+                    <ManagementListLoading
+                      className="py-8"
+                      screenReaderText={t("users.loading")}
+                    />
                   </TableCell>
                 </TableRow>
               ) : listErrorQuery ? (
@@ -853,8 +799,8 @@ function ProductsTableView({ categoryId }: { categoryId?: string | null } = {}) 
                     onClick={() => handleRowClick(row)}
                   >
                     <TableCell
-                      className="h-11 px-3 font-medium text-muted-foreground text-center align-middle"
-                      style={{ minWidth: "3.5rem", maxWidth: TABLE_COLUMN_MAX_WIDTH, verticalAlign: "middle" }}
+                      className="h-11 px-3 font-medium text-muted-foreground text-left align-middle tabular-nums"
+                      style={indexColumnStyle}
                     >
                       {(page - 1) * pageSizeClamped + index + 1}
                     </TableCell>
@@ -868,9 +814,7 @@ function ProductsTableView({ categoryId }: { categoryId?: string | null } = {}) 
                           key={col.id}
                           className={col.align === "right" ? "h-11 text-right px-3 align-middle" : "h-11 px-3 align-middle"}
                           style={{
-                            minWidth: col.minWidth ?? undefined,
-                            maxWidth: TABLE_COLUMN_MAX_WIDTH,
-                            verticalAlign: "middle",
+                            ...productListDataColumnStyle(col),
                             ...(col.id === "description" ? { overflow: "hidden" } : {}),
                           }}
                         >

@@ -5,10 +5,23 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableCellText,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MgmtTableColGroup } from "@/components/mgmt-table-colgroup";
+import {
+  MGMT_COLGROUP_5_ROLES,
+  mgmtTableLayoutClass,
+  mgmtTableHeaderRowClass,
+  mgmtTableHeadClass,
+  mgmtTableCellPrimaryClass,
+  mgmtTableCellMutedSmClass,
+  mgmtTableCellMutedXsClass,
+  mgmtTableCellNumericClass,
+} from "@/config/management-table";
+import { TableEmptyMessageRow } from "@/components/management-list-states";
 import { cn } from "@/lib/utils";
 import { ADMIN_SYSTEM_ROLE_ID } from "@/config/roles";
 import type { ApiRoleListItem } from "./types";
@@ -34,32 +47,21 @@ export function RolesTable({
 
   const isSystemAdmin = (role: ApiRoleListItem) => role.id === ADMIN_SYSTEM_ROLE_ID;
   return (
-    <div className="overflow-hidden">
-      <Table className="w-full table-fixed">
+    <>
+      <Table className={mgmtTableLayoutClass}>
+        <MgmtTableColGroup widths={MGMT_COLGROUP_5_ROLES} />
         <TableHeader>
-          <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead className="h-11 px-3 text-left align-middle">{t("roles.name")}</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">{t("roles.code")}</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle hidden md:table-cell">{t("roles.description")}</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle">{t("roles.createdAt")}</TableHead>
-            <TableHead className="h-11 px-3 text-left align-middle w-24">{t("roles.permissionsCount")}</TableHead>
+          <TableRow className={mgmtTableHeaderRowClass}>
+            <TableHead className={mgmtTableHeadClass}>{t("roles.name")}</TableHead>
+            <TableHead className={mgmtTableHeadClass}>{t("roles.code")}</TableHead>
+            <TableHead className={`${mgmtTableHeadClass} hidden md:table-cell`}>{t("roles.description")}</TableHead>
+            <TableHead className={mgmtTableHeadClass}>{t("roles.createdAt")}</TableHead>
+            <TableHead className={mgmtTableHeadClass}>{t("roles.permissionsCount")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isEmpty ? (
-            <TableRow key="empty" className="hover:bg-transparent">
-              <TableCell
-                plain
-                colSpan={5}
-                className="h-24 align-middle"
-              >
-                <div className="flex min-h-[8rem] w-full flex-col items-center justify-center gap-2 py-10 text-center">
-                  <p className="text-sm text-muted-foreground px-4">
-                    {emptyMessage}
-                  </p>
-                </div>
-              </TableCell>
-            </TableRow>
+            <TableEmptyMessageRow colSpan={5}>{emptyMessage}</TableEmptyMessageRow>
           ) : (
             roles.map((role) => (
               <TableRow
@@ -67,26 +69,33 @@ export function RolesTable({
                 className={cn("cursor-pointer hover:bg-muted/50")}
                 onClick={() => onRowClick(role)}
               >
-                <TableCell className="h-11 px-3 text-left align-middle font-medium">
-                  {role.name}
+                <TableCell className={mgmtTableCellPrimaryClass} title={role.name}>
+                  <TableCellText>{role.name}</TableCellText>
                 </TableCell>
-                <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm">
-                  {role.code}
+                <TableCell className={mgmtTableCellMutedSmClass} title={role.code}>
+                  <TableCellText>{role.code}</TableCellText>
                 </TableCell>
-                <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm truncate hidden md:table-cell" title={role.description ?? undefined}>
-                  {role.description ?? "—"}
+                <TableCell
+                  className={`${mgmtTableCellMutedSmClass} hidden md:table-cell`}
+                  title={role.description ?? undefined}
+                >
+                  <TableCellText>{role.description ?? "—"}</TableCellText>
                 </TableCell>
-                <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-xs">
-                  {isSystemAdmin(role) ? "—" : formatDateForDisplay(role.createdAt)}
+                <TableCell className={mgmtTableCellMutedXsClass}>
+                  <TableCellText>
+                    {isSystemAdmin(role) ? "—" : formatDateForDisplay(role.createdAt)}
+                  </TableCellText>
                 </TableCell>
-                <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm tabular-nums">
-                  {isSystemAdmin(role) ? t("roles.allPermissions") : role.permissionsCount}
+                <TableCell className={mgmtTableCellNumericClass}>
+                  <TableCellText className="tabular-nums">
+                    {isSystemAdmin(role) ? t("roles.allPermissions") : role.permissionsCount}
+                  </TableCellText>
                 </TableCell>
               </TableRow>
             ))
           )}
         </TableBody>
       </Table>
-    </div>
+    </>
   );
 }

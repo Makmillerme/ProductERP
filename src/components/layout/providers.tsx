@@ -2,6 +2,8 @@
 
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { defaultShouldDehydrateQuery } from "@tanstack/query-core";
+import type { Query } from "@tanstack/react-query";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { useState, useMemo, type ReactNode } from "react";
 import { getQueryClient } from "@/lib/query-client";
@@ -9,6 +11,15 @@ import { LocaleProvider } from "@/lib/locale-provider";
 
 const PERSIST_KEY = "vmd-react-query-cache";
 const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000; // 24 год
+
+/** Не зберігаємо вагові кеші (admin-таблиці, product-config) — менше localStorage та гідрація. */
+function shouldPersistQuery(query: Query): boolean {
+  const key = query.queryKey;
+  if (!Array.isArray(key) || key.length === 0) return defaultShouldDehydrateQuery(query);
+  const root = key[0];
+  if (root === "admin" || root === "product-config") return false;
+  return defaultShouldDehydrateQuery(query);
+}
 
 /** Безпечна серіалізація: пропускає DOM-елементи та циклічні посилання. */
 function safeStringify(data: unknown): string {
@@ -56,6 +67,9 @@ export function Providers({ children }: { children: ReactNode }) {
       persistOptions={{
         persister,
         maxAge: PERSIST_MAX_AGE,
+        dehydrateOptions: {
+          shouldDehydrateQuery: shouldPersistQuery,
+        },
       }}
     >
       {content}

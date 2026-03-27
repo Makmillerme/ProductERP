@@ -21,37 +21,18 @@ import {
   getDataModelProductTypeId,
   setDataModelProductTypeId,
 } from "@/lib/management-state";
-import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
+import { MANAGEMENT_STALE_MS, managementAdminKeys } from "@/lib/query-keys";
+import {
+  fetchAdminCategories,
+  fetchAdminProductTypes,
+} from "@/lib/api/admin/catalog";
 import { StatusesManagement } from "./products-config/statuses-management";
 import { CategoriesManagement } from "./products-config/categories-management";
 import { FieldDefinitionsManagement } from "./products-config/field-definitions-management";
 
-const CATEGORIES_KEY = ["admin", "categories"] as const;
-const PRODUCT_TYPES_KEY = ["admin", "product-types"] as const;
-
 type CategoryWithCount = { id: string; name: string; order: number; _count?: { productTypes: number; tabs: number } };
 
-async function fetchCategories(t: (key: string) => string): Promise<CategoryWithCount[]> {
-  const res = await fetch("/api/admin/categories");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadCategoriesFailed"));
-  }
-  const data = await res.json();
-  return data.categories ?? data ?? [];
-}
-
 type ProductTypeItem = { id: string; name: string; categoryId: string | null };
-
-async function fetchProductTypes(t: (key: string) => string): Promise<ProductTypeItem[]> {
-  const res = await fetch("/api/admin/product-types");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadTypesFailed"));
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data : (data?.productTypes ?? data?.vehicleTypes ?? []);
-}
 const DATA_MODEL_TABS = ["statuses", "categories", "data"] as const;
 type DataModelTab = (typeof DATA_MODEL_TABS)[number];
 
@@ -64,14 +45,14 @@ export function DataModelPage() {
   const hasInitializedProductTypeRef = useRef(false);
 
   const { data: categories = [] } = useQuery({
-    queryKey: [...CATEGORIES_KEY],
-    queryFn: () => fetchCategories(t),
+    queryKey: [...managementAdminKeys.categories],
+    queryFn: () => fetchAdminCategories(t) as Promise<CategoryWithCount[]>,
     staleTime: MANAGEMENT_STALE_MS,
   });
 
   const { data: allProductTypes = [] } = useQuery({
-    queryKey: [...PRODUCT_TYPES_KEY],
-    queryFn: () => fetchProductTypes(t),
+    queryKey: [...managementAdminKeys.productTypes],
+    queryFn: () => fetchAdminProductTypes(t) as Promise<ProductTypeItem[]>,
     staleTime: MANAGEMENT_STALE_MS,
   });
 

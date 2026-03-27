@@ -8,11 +8,14 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto overflow-y-auto scroll-smooth"
+      className="relative w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto scroll-smooth"
     >
       <table
         data-slot="table"
-        className={cn("min-w-max caption-bottom text-sm", className)}
+        className={cn(
+          "caption-bottom text-sm table-auto min-w-full w-max max-w-none",
+          className,
+        )}
         {...props}
       />
     </div>
@@ -70,15 +73,38 @@ function TableHead({ className, children, ...props }: React.ComponentProps<"th">
     <th
       data-slot="table-head"
       className={cn(
-        "text-foreground h-11 p-0 font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "text-foreground h-11 p-0 font-medium align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}
     >
-      <div className="flex h-11 min-h-11 w-full items-center">
-        {children}
+      <div
+        className={cn(
+          "flex min-h-11 w-full min-w-0 items-center leading-none",
+          className?.includes("text-center") && "justify-center",
+          className?.includes("text-right") && "justify-end"
+        )}
+      >
+        {className?.includes("whitespace-nowrap") ? (
+          children
+        ) : (
+          <span className="min-w-0 truncate leading-tight">{children}</span>
+        )}
       </div>
     </th>
+  )
+}
+
+/** Текст у комірці: обрізання в межах колонки (разом із `max-w-0` на `td`). */
+function TableCellText({
+  className,
+  ...props
+}: React.ComponentProps<"span">) {
+  return (
+    <span
+      className={cn("min-w-0 flex-1 truncate text-left", className)}
+      {...props}
+    />
   )
 }
 
@@ -95,7 +121,7 @@ function TableCell({ className, children, plain, ...props }: React.ComponentProp
       {plain ? (
         children
       ) : (
-        <div className="flex h-11 min-h-11 w-full min-w-0 items-center">
+        <div className="flex h-11 min-h-11 w-full min-w-0 max-w-full items-center gap-1.5 overflow-hidden">
           {children}
         </div>
       )}
@@ -124,5 +150,6 @@ export {
   TableHead,
   TableRow,
   TableCell,
+  TableCellText,
   TableCaption,
 }

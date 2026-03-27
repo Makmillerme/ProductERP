@@ -6,29 +6,22 @@ import { toast } from "sonner";
 import { useLocale } from "@/lib/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Search, Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown } from "lucide-react";
+import { Search, Plus } from "lucide-react";
 import { authClient, useSession } from "@/lib/auth-client";
 import { ADMIN_ROLE, ADMIN_LABEL, OWNER_ROLE, OWNER_LABEL } from "@/config/roles";
 import { TableWithPagination } from "@/components/table-with-pagination";
+import { TablePaginationBar } from "@/components/table-pagination-bar";
+import { ManagementListLoading } from "@/components/management-list-states";
 import { UsersTable } from "./users-table";
 import { UserDetailSheet } from "./user-detail-sheet";
 import { BanUserDialog } from "./ban-user-dialog";
 import { UnbanUserDialog } from "./unban-user-dialog";
 import { DeleteUserDialog } from "./delete-user-dialog";
 import type { AdminUser } from "./types";
+import { managementAdminKeys } from "@/lib/query-keys";
 
 const PAGE_SIZES = [10, 20, 50] as const;
 const DEFAULT_PAGE_SIZE = 20;
-
-const USERS_QUERY_KEY = ["admin", "users"] as const;
-const ROLES_QUERY_KEY = ["admin", "roles"] as const;
 
 async function fetchRolesForSelect(): Promise<{ code: string; name: string }[]> {
   const res = await fetch("/api/roles");
@@ -50,7 +43,7 @@ function useUsersList(
   t: (key: string) => string
 ) {
   return useQuery({
-    queryKey: [...USERS_QUERY_KEY, params],
+    queryKey: [...managementAdminKeys.users, params],
     queryFn: async () => {
       const searchValue = params.search.trim() || undefined;
       const searchField = searchValue?.includes("@") ? "email" : "name";
@@ -121,13 +114,13 @@ export function UsersManagement() {
     [search, sortBy, sortDirection, pageSize, offset]
   );
 
-  const { data, isLoading, isError, error, refetch } = useUsersList(listParams, t);
+  const { data, isLoading, isError, error } = useUsersList(listParams, t);
   const users = data?.users ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const { data: rolesList = [] } = useQuery({
-    queryKey: ROLES_QUERY_KEY,
+    queryKey: managementAdminKeys.roles,
     queryFn: fetchRolesForSelect,
     enabled: isAdmin,
   });
@@ -171,27 +164,27 @@ export function UsersManagement() {
     setPage(clamped);
   }, [totalPages]);
 
-  const refetchList = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  const invalidateUsersList = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: managementAdminKeys.users });
+  }, [queryClient]);
 
   const onSuccessBan = useCallback(() => {
-    refetchList();
+    invalidateUsersList();
     setSelectedUser(null);
     toast.success(t("toasts.userBanned"));
-  }, [refetchList, t]);
+  }, [invalidateUsersList, t]);
 
   const onSuccessUnban = useCallback(() => {
-    refetchList();
+    invalidateUsersList();
     setSelectedUser(null);
     toast.success(t("toasts.userUnbanned"));
-  }, [refetchList, t]);
+  }, [invalidateUsersList, t]);
 
   const onSuccessDelete = useCallback(() => {
-    refetchList();
+    invalidateUsersList();
     setSelectedUser(null);
     toast.success(t("toasts.userDeleted"));
-  }, [refetchList, t]);
+  }, [invalidateUsersList, t]);
 
   if (sessionPending) return null;
 
@@ -204,9 +197,6 @@ export function UsersManagement() {
       </div>
     );
   }
-
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
 
   return (
     <div className="flex flex-col gap-4">
@@ -242,102 +232,27 @@ export function UsersManagement() {
       )}
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground py-8">{t("users.loading")}</p>
+        <ManagementListLoading screenReaderText={t("users.loading")} />
       ) : (
         <>
           <TableWithPagination
             pagination={
-              <>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label={t("common.pagination.ariaFirstPage")}
-                disabled={!canPrev}
-                onClick={() => goToPage(1)}
-              >
-                <ChevronsLeft className="size-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label={t("common.pagination.ariaPrevPage")}
-                disabled={!canPrev}
-                onClick={() => goToPage(page - 1)}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <span className="flex items-center gap-1.5 px-2 text-sm text-muted-foreground">
-                {t("common.pagination.page")}
-                <Input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={pageInputValue}
-                  onChange={(e) => setPageInputValue(e.target.value)}
-                  onBlur={handlePageInputBlur}
-                  onKeyDown={handlePageInputKeyDown}
-                  className="h-8 w-14 text-center"
-                  aria-label={t("common.pagination.ariaPageNumber")}
-                />
-                {t("common.pagination.pageOf")} {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label={t("common.pagination.ariaNextPage")}
-                disabled={!canNext}
-                onClick={() => goToPage(page + 1)}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                aria-label={t("common.pagination.ariaLastPage")}
-                disabled={!canNext}
-                onClick={() => goToPage(totalPages)}
-              >
-                <ChevronsRight className="size-4" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{t("common.pagination.rowsPerPage")}</span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="default"
-                    className="gap-2 min-w-[4.5rem] justify-between"
-                    aria-label={t("common.pagination.ariaRowsPerPage")}
-                  >
-                    {pageSize}
-                    <ChevronDown className="size-4 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuRadioGroup
-                    value={String(pageSize)}
-                    onValueChange={(v) => {
-                      setPageSize(Number(v));
-                      setPage(1);
-                    }}
-                  >
-                    {PAGE_SIZES.map((n) => (
-                      <DropdownMenuRadioItem key={n} value={String(n)}>
-                        {n}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            </>
-          }
+              <TablePaginationBar
+                page={page}
+                totalPages={totalPages}
+                pageInputValue={pageInputValue}
+                onPageInputChange={setPageInputValue}
+                onPageInputBlur={handlePageInputBlur}
+                onPageInputKeyDown={handlePageInputKeyDown}
+                goToPage={goToPage}
+                pageSize={pageSize}
+                pageSizes={PAGE_SIZES}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+              />
+            }
         >
           <UsersTable
             users={users}
@@ -368,15 +283,15 @@ export function UsersManagement() {
         isOwner={isOwner}
         roleOptions={roleOptions}
         onSuccess={(isCreate) => {
-          refetchList();
+          invalidateUsersList();
           toast.success(isCreate ? t("users.userCreated") : t("users.userUpdated"));
         }}
         onRequestBan={setBanUser}
         onRequestUnban={setUnbanUser}
         onRequestDelete={setDeleteUser}
         onTransferSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ["me"] });
-          refetchList();
+          void queryClient.invalidateQueries({ queryKey: ["me"] });
+          invalidateUsersList();
         }}
       />
       <BanUserDialog

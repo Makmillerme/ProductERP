@@ -1,1 +1,0 @@
-Parser import: resolveProductType now accepts defaultCategoryId. When creating a new ProductType via POST /api/admin/parser/import, it uses body.categoryId. Prevents 'orphan' types (category_id=null). Run npm run db:clear to reset management data (keeps User, Session, Account, Verification).

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionCookie } from "better-auth/cookies";
 
 const LOGIN_PATH = "/login";
 
@@ -9,35 +10,21 @@ function isPublic(pathname: string): boolean {
   return false;
 }
 
-async function getSessionData(origin: string, cookie: string): Promise<{ user?: unknown } | null> {
-  try {
-    const res = await fetch(`${origin}/api/auth/get-session`, { headers: { cookie } });
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!res.ok || !contentType.includes("application/json")) return null;
-    const data = await res.json();
-    return data;
-  } catch {
-    return null;
-  }
+/** Оптимістична перевірка наявності сесії (без HTTP/БД). Реальна валідація — у API через auth.api.getSession. */
+function hasSessionCookie(request: NextRequest): boolean {
+  return getSessionCookie(request) !== null;
 }
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isPublic(pathname)) {
-    if (pathname === LOGIN_PATH) {
-      const cookie = request.headers.get("cookie") ?? "";
-      const data = await getSessionData(request.nextUrl.origin, cookie);
-      if (data?.user) {
-        return NextResponse.redirect(new URL("/", request.url));
-      }
+    if (pathname === LOGIN_PATH && hasSessionCookie(request)) {
+      return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next();
   }
 
-  const cookie = request.headers.get("cookie") ?? "";
-  const data = await getSessionData(request.nextUrl.origin, cookie);
-
-  if (!data?.user) {
+  if (!hasSessionCookie(request)) {
     const login = new URL(LOGIN_PATH, request.url);
     login.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(login);
@@ -47,5 +34,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

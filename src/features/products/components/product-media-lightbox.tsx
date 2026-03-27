@@ -6,16 +6,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ZoomIn, ZoomOut, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -278,29 +269,18 @@ export function ProductMediaLightbox(props: ProductMediaLightboxProps) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("productMediaLightbox.deleteTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("productMediaLightbox.deleteDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>{t("productMediaLightbox.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                handleDeleteConfirm();
-              }}
-              disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleting ? t("productMediaLightbox.deleting") : t("productMediaLightbox.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDestructiveDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title={t("productMediaLightbox.deleteTitle")}
+        description={t("productMediaLightbox.deleteDescription")}
+        cancelLabel={t("productMediaLightbox.cancel")}
+        confirmLabel={t("productMediaLightbox.delete")}
+        confirmPendingLabel={t("productMediaLightbox.deleting")}
+        confirmPending={deleting}
+        cancelDisabled={deleting}
+        onConfirm={handleDeleteConfirm}
+      />
     </>
   );
 }

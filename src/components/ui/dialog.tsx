@@ -5,6 +5,10 @@ import { XIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import {
+  mergeRefs,
+  OverlayPortalContainerProvider,
+} from "@/components/ui/overlay-portal-container"
 import { Button } from "@/components/ui/button"
 
 function Dialog({
@@ -47,16 +51,36 @@ function DialogOverlay({
   )
 }
 
-function DialogContent({
-  className,
-  children,
-  showCloseButton = true,
-  onPointerDownOutside,
-  onInteractOutside,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  showCloseButton?: boolean
-}) {
+const DialogContent = React.forwardRef<
+  React.ComponentRef<typeof DialogPrimitive.Content>,
+  React.ComponentProps<typeof DialogPrimitive.Content> & {
+    showCloseButton?: boolean
+  }
+>(function DialogContent(
+  {
+    className,
+    children,
+    showCloseButton = true,
+    onPointerDownOutside,
+    onInteractOutside,
+    ...props
+  },
+  forwardedRef,
+) {
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(
+    null,
+  )
+  const setPortalContainerRef = React.useCallback((el: HTMLElement | null) => {
+    setPortalContainer(el)
+  }, [])
+  const contentRef = React.useMemo(
+    () =>
+      mergeRefs<React.ComponentRef<typeof DialogPrimitive.Content>>(
+        forwardedRef,
+        setPortalContainerRef,
+      ),
+    [forwardedRef, setPortalContainerRef],
+  )
   const preventCloseWhenCalculator = (e: { detail?: { originalEvent?: { target?: EventTarget | null } }; preventDefault: () => void }) => {
     const target = e.detail?.originalEvent?.target as HTMLElement | undefined
     if (target?.closest?.("[data-calculator-root]")) e.preventDefault()
@@ -65,6 +89,7 @@ function DialogContent({
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
+        ref={contentRef}
         data-slot="dialog-content"
         onPointerDownOutside={(ev) => {
           preventCloseWhenCalculator(ev)
@@ -80,7 +105,9 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        <OverlayPortalContainerProvider value={portalContainer}>
+          {children}
+        </OverlayPortalContainerProvider>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
@@ -93,7 +120,8 @@ function DialogContent({
       </DialogPrimitive.Content>
     </DialogPortal>
   )
-}
+})
+DialogContent.displayName = "DialogContent"
 
 function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
   return (

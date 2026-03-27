@@ -105,8 +105,6 @@ model Product {
   categoryId        String?   @map("category_id")
   productStatusId   String?   @map("product_status_id")
   processedFileId   Int?      @map("processed_file_id")
-  pdfUrl            String?   @map("pdf_url")
-  briefPdfPath      String?   @map("brief_pdf_path")
   createdAt         DateTime  @default(now()) @map("created_at")
 
   productTypeRef    ProductType?  @relation(...)
@@ -154,8 +152,6 @@ type Product = {
   category_id: string | null;
   product_status_id: string | null;
   processed_file_id: number | null;
-  pdf_url: string | null;
-  brief_pdf_path: string | null;
   created_at: string;
   media?: ProductMedia[];
   // Динамічні поля — по code з FieldDefinition

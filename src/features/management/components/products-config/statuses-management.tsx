@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   Sheet,
@@ -14,41 +17,45 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableCellText,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MgmtTableColGroup } from "@/components/mgmt-table-colgroup";
+import {
+  MGMT_COLGROUP_5_STATUS,
+  mgmtTableLayoutClass,
+  mgmtTableHeaderRowClass,
+  mgmtTableHeadClass,
+  mgmtTableHeadCenterClass,
+  mgmtTableCellClass,
+  mgmtTableCellPrimaryClass,
+  mgmtTableCellMutedSmClass,
+} from "@/config/management-table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Search,
-  Plus,
-  Loader2,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronDown,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Search, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/locale-provider";
 import { cn } from "@/lib/utils";
-import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
+import { MANAGEMENT_STALE_MS, managementAdminKeys, managementPublicKeys } from "@/lib/query-keys";
+import { adminGetJson, adminMutationJson, adminDeleteAllowMissing } from "@/lib/api/admin/client";
 import { TableWithPagination } from "@/components/table-with-pagination";
+import { TablePaginationBar } from "@/components/table-pagination-bar";
+import { ManagementListLoading, TableEmptyMessageRow } from "@/components/management-list-states";
 import type { StatusItem } from "./types";
-
-const STATUSES_KEY = ["admin", "statuses"] as const;
 
 const PAGE_SIZES = [10, 20, 50] as const;
 const DEFAULT_PAGE_SIZE = 20;
@@ -61,12 +68,10 @@ async function fetchStatuses(
   if (params.search) searchParams.set("search", params.search);
   searchParams.set("page", String(params.page));
   searchParams.set("pageSize", String(params.pageSize));
-  const res = await fetch(`/api/admin/statuses?${searchParams.toString()}`);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.statusesConfig.loadFailed"));
-  }
-  const data = await res.json();
+  const data = await adminGetJson<{
+    statuses?: StatusItem[];
+    total?: number;
+  }>(`/statuses?${searchParams.toString()}`, t("productsConfig.statusesConfig.loadFailed"));
   return {
     statuses: data.statuses ?? [],
     total: data.total ?? 0,
@@ -83,14 +88,11 @@ async function createStatus(
   },
   t: (key: string) => string
 ) {
-  const res = await fetch("/api/admin/statuses", {
+  return adminMutationJson("/statuses", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.statusesConfig.createFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.statusesConfig.createFailed"));
-  return data;
 }
 
 async function updateStatus(
@@ -104,25 +106,27 @@ async function updateStatus(
   },
   t: (key: string) => string
 ) {
-  const res = await fetch(`/api/admin/statuses/${id}`, {
+  return adminMutationJson(`/statuses/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.statusesConfig.saveFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.statusesConfig.saveFailed"));
-  return data;
 }
 
 async function deleteStatus(id: string, t: (key: string) => string) {
-  const res = await fetch(`/api/admin/statuses/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.statusesConfig.deleteFailed"));
-  }
+  await adminDeleteAllowMissing(
+    `/statuses/${id}`,
+    t("productsConfig.statusesConfig.deleteFailed")
+  );
 }
+
+type StatusFormValues = {
+  name: string;
+  color: string;
+  order: number;
+  description: string;
+  isDefault: boolean;
+};
 
 export function StatusesManagement() {
   const { t } = useLocale();
@@ -140,11 +144,6 @@ export function StatusesManagement() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pageInputValue, setPageInputValue] = useState("1");
 
-  const [name, setName] = useState("");
-  const [color, setColor] = useState("#6b7280");
-  const [order, setOrder] = useState(0);
-  const [description, setDescription] = useState("");
-  const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const listParams = useMemo(
@@ -158,7 +157,7 @@ export function StatusesManagement() {
     isError,
     error,
   } = useQuery({
-    queryKey: [...STATUSES_KEY, listParams],
+    queryKey: [...managementAdminKeys.statuses, listParams],
     queryFn: () => fetchStatuses(listParams, t),
     staleTime: MANAGEMENT_STALE_MS,
     placeholderData: keepPreviousData,
@@ -167,6 +166,40 @@ export function StatusesManagement() {
   const statuses = data?.statuses ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const statusFormDefaults = useCallback(
+    (): StatusFormValues => ({
+      name: "",
+      color: "#6b7280",
+      order: total,
+      description: "",
+      isDefault: false,
+    }),
+    [total]
+  );
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("validationRequired.statusName")),
+        color: z.string(),
+        order: z.number().int(),
+        description: z.string(),
+        isDefault: z.boolean(),
+      }),
+    [t]
+  );
+
+  const form = useForm<StatusFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      color: "#6b7280",
+      order: 0,
+      description: "",
+      isDefault: false,
+    },
+  });
 
   useEffect(() => {
     setPageInputValue(String(page));
@@ -209,11 +242,17 @@ export function StatusesManagement() {
     [totalPages]
   );
 
+  const listCacheKey = useMemo(
+    () => [...managementAdminKeys.statuses, listParams] as const,
+    [listParams]
+  );
+
   const createMut = useMutation({
     mutationFn: (body: Parameters<typeof createStatus>[0]) =>
       createStatus(body, t),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: STATUSES_KEY });
+      void queryClient.invalidateQueries({ queryKey: managementAdminKeys.statuses });
+      void queryClient.invalidateQueries({ queryKey: managementPublicKeys.statuses });
       toast.success(t("toasts.statusCreated"));
     },
   });
@@ -226,43 +265,106 @@ export function StatusesManagement() {
       id: string;
       body: Parameters<typeof updateStatus>[1];
     }) => updateStatus(id, body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: STATUSES_KEY });
+    onMutate: async ({ id, body }) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.statuses });
+      const key = [...managementAdminKeys.statuses, listParams] as const;
+      const prev = queryClient.getQueryData<{
+        statuses: StatusItem[];
+        total: number;
+      }>(key);
+      if (!prev) return { prev: undefined, key };
+      const nextStatuses = prev.statuses.map((s) => {
+        if (s.id !== id) {
+          if (body.isDefault === true && s.isDefault) {
+            return { ...s, isDefault: false };
+          }
+          return s;
+        }
+        return {
+          ...s,
+          ...(body.name !== undefined && { name: body.name }),
+          ...(body.color !== undefined && { color: body.color }),
+          ...(body.order !== undefined && { order: body.order }),
+          ...(body.description !== undefined && { description: body.description }),
+          ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
+        };
+      });
+      queryClient.setQueryData(key, { ...prev, statuses: nextStatuses });
+      return { prev, key };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev != null && ctx.key) {
+        queryClient.setQueryData(ctx.key, ctx.prev);
+      }
+    },
+    onSuccess: (data, _vars, ctx) => {
+      const row = data as StatusItem;
+      const key = ctx?.key ?? listCacheKey;
+      const cur = queryClient.getQueryData<{
+        statuses: StatusItem[];
+        total: number;
+      }>(key);
+      if (cur) {
+        queryClient.setQueryData(key, {
+          ...cur,
+          statuses: cur.statuses.map((s) => {
+            if (s.id === row.id) return { ...row };
+            if (row.isDefault && s.isDefault && s.id !== row.id) {
+              return { ...s, isDefault: false };
+            }
+            return s;
+          }),
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: managementPublicKeys.statuses });
       toast.success(t("toasts.statusSaved"));
     },
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteStatus(id, t),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.statuses });
+      const key = [...managementAdminKeys.statuses, listParams] as const;
+      const prev = queryClient.getQueryData<{
+        statuses: StatusItem[];
+        total: number;
+      }>(key);
+      if (!prev) return { prev: undefined, key };
+      queryClient.setQueryData(key, {
+        statuses: prev.statuses.filter((s) => s.id !== id),
+        total: Math.max(0, prev.total - 1),
+      });
+      return { prev, key };
+    },
+    onError: (_e, _deletedId, ctx) => {
+      if (ctx?.prev != null && ctx.key) {
+        queryClient.setQueryData(ctx.key, ctx.prev);
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: STATUSES_KEY });
+      void queryClient.invalidateQueries({ queryKey: managementPublicKeys.statuses });
       toast.success(t("toasts.statusDeleted"));
     },
   });
 
-  const resetForm = () => {
-    setName("");
-    setColor("#6b7280");
-    setOrder(total);
-    setDescription("");
-    setIsDefault(false);
-  };
-
   const openForCreate = () => {
     setSelectedStatus(null);
     setIsCreate(true);
-    resetForm();
+    form.reset(statusFormDefaults());
     setSheetOpen(true);
   };
 
   const openForEdit = (s: StatusItem) => {
     setSelectedStatus(s);
     setIsCreate(false);
-    setName(s.name);
-    setColor(s.color);
-    setOrder(s.order);
-    setDescription(s.description ?? "");
-    setIsDefault(s.isDefault);
+    form.reset({
+      name: s.name,
+      color: s.color,
+      order: s.order,
+      description: s.description ?? "",
+      isDefault: s.isDefault,
+    });
     setSheetOpen(true);
   };
 
@@ -270,38 +372,37 @@ export function StatusesManagement() {
     setSheetOpen(false);
     setSelectedStatus(null);
     setIsCreate(false);
+    form.reset(statusFormDefaults());
   };
 
   useEffect(() => {
     setHasMounted(true);
   }, []);
 
-  const handleSave = async () => {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      toast.error(t("validationRequired.statusName"));
-      return;
-    }
+  const onSubmit = async (values: StatusFormValues) => {
+    const trimmedName = values.name.trim();
+    const colorVal = values.color.trim() || "#6b7280";
+    const desc = values.description.trim() || null;
 
     setSaving(true);
     try {
       if (isCreate) {
         await createMut.mutateAsync({
           name: trimmedName,
-          color: color.trim() || "#6b7280",
-          order,
-          description: description.trim() || null,
-          isDefault,
+          color: colorVal,
+          order: values.order,
+          description: desc,
+          isDefault: values.isDefault,
         });
       } else if (selectedStatus) {
         await updateMut.mutateAsync({
           id: selectedStatus.id,
           body: {
             name: trimmedName,
-            color: color.trim() || "#6b7280",
-            order,
-            description: description.trim() || null,
-            isDefault,
+            color: colorVal,
+            order: values.order,
+            description: desc,
+            isDefault: values.isDefault,
           },
         });
       }
@@ -331,9 +432,6 @@ export function StatusesManagement() {
     total === 0 && !search.trim()
       ? t("productsConfig.statusesConfig.emptyCreate")
       : t("common.emptySearch");
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
@@ -367,142 +465,51 @@ export function StatusesManagement() {
       )}
 
       {!hasMounted || (isLoading && !statuses.length) ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <ManagementListLoading />
       ) : (
         <TableWithPagination
           pagination={
-            <>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                  aria-label={t("common.pagination.ariaFirstPage")}
-                  disabled={!canPrev}
-                  onClick={() => goToPage(1)}
-                >
-                  <ChevronsLeft className="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                  aria-label={t("common.pagination.ariaPrevPage")}
-                  disabled={!canPrev}
-                  onClick={() => goToPage(page - 1)}
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="flex items-center gap-1.5 px-2 text-sm text-muted-foreground">
-                  {t("common.pagination.page")}
-                  <Input
-                    type="number"
-                    min={1}
-                    max={totalPages}
-                    value={pageInputValue}
-                    onChange={(e) => setPageInputValue(e.target.value)}
-                    onBlur={handlePageInputBlur}
-                    onKeyDown={handlePageInputKeyDown}
-                    className="h-8 w-14 text-center"
-                    aria-label={t("common.pagination.ariaPageNumber")}
-                  />
-                  {t("common.pagination.pageOf")} {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                  aria-label={t("common.pagination.ariaNextPage")}
-                  disabled={!canNext}
-                  onClick={() => goToPage(page + 1)}
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                  aria-label={t("common.pagination.ariaLastPage")}
-                  disabled={!canNext}
-                  onClick={() => goToPage(totalPages)}
-                >
-                  <ChevronsRight className="size-4" />
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>{t("common.pagination.rowsPerPage")}</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="default"
-                      className="gap-2 min-w-[4.5rem] justify-between"
-                      aria-label={t("common.pagination.ariaRowsPerPage")}
-                    >
-                      {pageSize}
-                      <ChevronDown className="size-4 opacity-50" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuRadioGroup
-                      value={String(pageSize)}
-                      onValueChange={(v) => {
-                        setPageSize(Number(v));
-                        setPage(1);
-                      }}
-                    >
-                      {PAGE_SIZES.map((n) => (
-                        <DropdownMenuRadioItem key={n} value={String(n)}>
-                          {n}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </>
+            <TablePaginationBar
+              page={page}
+              totalPages={totalPages}
+              pageInputValue={pageInputValue}
+              onPageInputChange={setPageInputValue}
+              onPageInputBlur={handlePageInputBlur}
+              onPageInputKeyDown={handlePageInputKeyDown}
+              goToPage={goToPage}
+              pageSize={pageSize}
+              pageSizes={PAGE_SIZES}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+            />
           }
         >
-          <Table className="w-full table-fixed">
-            <colgroup>
-              <col className="w-16" />
-              <col style={{ width: "1%" }} />
-              <col className="w-24" />
-              <col className="w-36" />
-              <col className="min-w-[8rem]" />
-            </colgroup>
+          <Table className={mgmtTableLayoutClass}>
+            <MgmtTableColGroup widths={MGMT_COLGROUP_5_STATUS} />
             <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="h-11 px-3 text-center align-middle w-16">
+              <TableRow className={mgmtTableHeaderRowClass}>
+                <TableHead className={mgmtTableHeadCenterClass}>
                   {t("productsConfig.statusesConfig.color")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle">
+                <TableHead className={mgmtTableHeadClass}>
                   {t("productsConfig.common.name")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle w-24">
+                <TableHead className={mgmtTableHeadClass}>
                   {t("productsConfig.common.order")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle w-36">
+                <TableHead className={mgmtTableHeadClass}>
                   {t("productsConfig.statusesConfig.defaultBadge")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle hidden md:table-cell">
+                <TableHead className={`${mgmtTableHeadClass} hidden md:table-cell`}>
                   {t("productsConfig.statusesConfig.descriptionColumn")}
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isEmpty ? (
-                <TableRow key="empty" className="hover:bg-transparent">
-                  <TableCell plain colSpan={5} className="h-24 align-middle">
-                    <div className="flex min-h-[8rem] w-full flex-col items-center justify-center gap-2 py-10 text-center">
-                      <p className="text-sm text-muted-foreground px-4">
-                        {emptyMessage}
-                      </p>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <TableEmptyMessageRow colSpan={5}>{emptyMessage}</TableEmptyMessageRow>
               ) : (
                 statuses.map((s) => (
                   <TableRow
@@ -510,19 +517,21 @@ export function StatusesManagement() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => openForEdit(s)}
                   >
-                    <TableCell className="h-11 px-3 text-center align-middle">
-                      <span
-                        className="inline-block size-3 rounded-full shrink-0"
-                        style={{ backgroundColor: s.color }}
-                      />
+                    <TableCell plain className={`${mgmtTableCellClass} text-center`}>
+                      <div className="flex h-11 min-h-11 w-full min-w-0 max-w-full items-center justify-center gap-1.5 overflow-hidden">
+                        <span
+                          className="inline-block size-3 rounded-full shrink-0"
+                          style={{ backgroundColor: s.color }}
+                        />
+                      </div>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle font-medium">
-                      {s.name}
+                    <TableCell className={mgmtTableCellPrimaryClass} title={s.name}>
+                      <TableCellText>{s.name}</TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm tabular-nums">
-                      {s.order}
+                    <TableCell className={cn(mgmtTableCellMutedSmClass, "tabular-nums")}>
+                      <TableCellText className="tabular-nums">{s.order}</TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle">
+                    <TableCell className={mgmtTableCellClass}>
                       {s.isDefault ? (
                         <Badge
                           variant="secondary"
@@ -537,10 +546,10 @@ export function StatusesManagement() {
                       )}
                     </TableCell>
                     <TableCell
-                      className="h-11 px-3 text-left align-middle text-muted-foreground text-sm truncate hidden md:table-cell"
+                      className={`${mgmtTableCellMutedSmClass} hidden md:table-cell`}
                       title={s.description ?? undefined}
                     >
-                      {s.description ?? "—"}
+                      <TableCellText>{s.description ?? "—"}</TableCellText>
                     </TableCell>
                   </TableRow>
                 ))
@@ -569,130 +578,179 @@ export function StatusesManagement() {
             )}
           </SheetHeader>
 
-          <div className={SHEET_BODY_CLASS}>
-            <div className={SHEET_BODY_SCROLL_CLASS}>
-              <div className={cn("grid", SHEET_FORM_GAP, SHEET_FORM_PADDING)}>
-                <div className={cn("grid", SHEET_FIELD_GAP)}>
-                  <Label htmlFor="st-name">{t("productsConfig.common.name")}</Label>
-                  <Input
-                    id="st-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={t("productsConfig.statusesConfig.namePlaceholder")}
-                    disabled={saving}
-                    className={SHEET_INPUT_CLASS}
-                  />
-                </div>
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <div className={SHEET_BODY_CLASS}>
+                <div className={SHEET_BODY_SCROLL_CLASS}>
+                  <div className={cn("grid", SHEET_FORM_GAP, SHEET_FORM_PADDING)}>
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem className={cn("grid", SHEET_FIELD_GAP)}>
+                          <FormLabel>{t("productsConfig.common.name")}</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder={t("productsConfig.statusesConfig.namePlaceholder")}
+                              disabled={saving}
+                              className={SHEET_INPUT_CLASS}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <div className={cn("grid", SHEET_FIELD_GAP)}>
-                  <Label htmlFor="st-color">{t("productsConfig.statusesConfig.colorHex")}</Label>
-                  <div className="flex items-center gap-2">
-                    {/* Прихований native color input, відкривається тільки по кліку на кнопку */}
-                    <input
-                      ref={colorInputRef}
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      disabled={saving}
-                      className="sr-only"
-                      aria-hidden="true"
-                      tabIndex={-1}
+                    <FormField
+                      control={form.control}
+                      name="color"
+                      render={({ field }) => (
+                        <FormItem className={cn("grid", SHEET_FIELD_GAP)}>
+                          <FormLabel>{t("productsConfig.statusesConfig.colorHex")}</FormLabel>
+                          <div className="flex items-center gap-2">
+                            <input
+                              ref={colorInputRef}
+                              type="color"
+                              value={field.value}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              disabled={saving}
+                              className="sr-only"
+                              aria-hidden="true"
+                              tabIndex={-1}
+                            />
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => colorInputRef.current?.click()}
+                              className="inline-block size-8 shrink-0 rounded-md border border-input bg-background cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              style={{ backgroundColor: field.value }}
+                              aria-label={t("productsConfig.statusesConfig.selectColor")}
+                            />
+                            <FormControl>
+                              <Input
+                                placeholder="#6b7280"
+                                disabled={saving}
+                                className={SHEET_INPUT_CLASS}
+                                {...field}
+                              />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => colorInputRef.current?.click()}
-                      className="inline-block size-8 shrink-0 rounded-md border border-input bg-background cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      style={{ backgroundColor: color }}
-                      aria-label={t("productsConfig.statusesConfig.selectColor")}
+
+                    <FormField
+                      control={form.control}
+                      name="order"
+                      render={({ field }) => (
+                        <FormItem className={cn("grid", SHEET_FIELD_GAP)}>
+                          <FormLabel>{t("productsConfig.common.order")}</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              disabled={saving}
+                              className={SHEET_INPUT_CLASS}
+                              name={field.name}
+                              ref={field.ref}
+                              onBlur={field.onBlur}
+                              value={field.value}
+                              onChange={(e) =>
+                                field.onChange(
+                                  e.target.value === "" ? 0 : Number(e.target.value)
+                                )
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    <Input
-                      id="st-color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      placeholder="#6b7280"
-                      disabled={saving}
-                      className={SHEET_INPUT_CLASS}
+
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem className={cn("grid", SHEET_FIELD_GAP)}>
+                          <FormLabel>{t("productsConfig.common.description")}</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder={t("productsConfig.statusesConfig.descPlaceholder")}
+                              disabled={saving}
+                              rows={3}
+                              className={SHEET_INPUT_CLASS}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="isDefault"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center gap-2 space-y-0 pt-1">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(v) => field.onChange(v === true)}
+                              disabled={saving}
+                            />
+                          </FormControl>
+                          <FormLabel className="font-normal leading-none">
+                            {t("productsConfig.statusesConfig.defaultBadge")}
+                          </FormLabel>
+                        </FormItem>
+                      )}
                     />
                   </div>
                 </div>
-
-                <div className={cn("grid", SHEET_FIELD_GAP)}>
-                  <Label htmlFor="st-order">{t("productsConfig.common.order")}</Label>
-                  <Input
-                    id="st-order"
-                    type="number"
-                    value={order}
-                    onChange={(e) => setOrder(Number(e.target.value))}
-                    disabled={saving}
-                    className={SHEET_INPUT_CLASS}
-                  />
-                </div>
-
-                <div className={cn("grid", SHEET_FIELD_GAP)}>
-                  <Label htmlFor="st-desc">{t("productsConfig.common.description")}</Label>
-                  <Textarea
-                    id="st-desc"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder={t("productsConfig.statusesConfig.descPlaceholder")}
-                    disabled={saving}
-                    rows={3}
-                    className={SHEET_INPUT_CLASS}
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <Checkbox
-                    id="st-default"
-                    checked={isDefault}
-                    onCheckedChange={(v) => setIsDefault(!!v)}
-                    disabled={saving}
-                  />
-                  <Label htmlFor="st-default" className="leading-none">
-                    {t("productsConfig.statusesConfig.defaultBadge")}
-                  </Label>
-                </div>
               </div>
-            </div>
-          </div>
 
-          <SheetFooter className={SHEET_FOOTER_CLASS}>
-            <div className="flex w-full flex-wrap items-center justify-between gap-2">
-              <div>
-                {!isCreate && selectedStatus && !selectedStatus.isDefault && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleDelete}
-                    disabled={saving || deleteMut.isPending}
-                    className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    {saving && deleteMut.isPending ? (
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                    ) : null}
-                    {t("productsConfig.common.delete")}
-                  </Button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={closeSheet}
-                  disabled={saving}
-                >
-                  {t("productsConfig.common.cancel")}
-                </Button>
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving && !deleteMut.isPending ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  ) : null}
-                  {isCreate ? t("productsConfig.common.create") : t("productsConfig.common.save")}
-                </Button>
-              </div>
-            </div>
-          </SheetFooter>
+              <SheetFooter className={SHEET_FOOTER_CLASS}>
+                <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                  <div>
+                    {!isCreate && selectedStatus && !selectedStatus.isDefault && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleDelete}
+                        disabled={saving || deleteMut.isPending}
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        {saving && deleteMut.isPending ? (
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : null}
+                        {t("productsConfig.common.delete")}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeSheet}
+                      disabled={saving}
+                    >
+                      {t("productsConfig.common.cancel")}
+                    </Button>
+                    <Button type="submit" disabled={saving}>
+                      {saving && !deleteMut.isPending ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : null}
+                      {isCreate ? t("productsConfig.common.create") : t("productsConfig.common.save")}
+                    </Button>
+                  </div>
+                </div>
+              </SheetFooter>
+            </form>
+          </Form>
         </SheetContent>
       </Sheet>
     </div>

@@ -3,17 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/locale-provider";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogBody,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
 import { authClient } from "@/lib/auth-client";
 import type { AdminUser } from "./types";
 
@@ -64,35 +54,21 @@ export function DeleteUserDialog({
   if (!user) return null;
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t("usersDelete.title")}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {isSelf
-              ? t("usersDelete.descriptionSelf")
-              : tFormat("usersDelete.descriptionOther", { email: user.email })}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && (
-          <AlertDialogBody>
-            <p className="text-sm text-destructive">{error}</p>
-          </AlertDialogBody>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault();
-              handleConfirm();
-            }}
-            disabled={loading}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            {loading ? t("usersDelete.actioning") : t("usersDelete.action")}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDestructiveDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t("usersDelete.title")}
+      description={
+        isSelf
+          ? t("usersDelete.descriptionSelf")
+          : tFormat("usersDelete.descriptionOther", { email: user.email })
+      }
+      errorMessage={error}
+      cancelLabel={t("productsConfig.common.cancel")}
+      confirmLabel={t("usersDelete.action")}
+      confirmPendingLabel={t("usersDelete.actioning")}
+      confirmPending={loading}
+      onConfirm={handleConfirm}
+    />
   );
 }

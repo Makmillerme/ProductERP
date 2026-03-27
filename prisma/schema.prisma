@@ -77,8 +77,6 @@ model Product {
   categoryId        String?   @map("category_id")
   productStatusId   String?   @map("product_status_id")
   processedFileId   Int?      @map("processed_file_id")
-  pdfUrl            String?   @map("pdf_url")
-  briefPdfPath      String?   @map("brief_pdf_path")
   createdAt         DateTime  @default(now()) @map("created_at")
 
   productTypeRef    ProductType?     @relation(fields: [productTypeId], references: [id], onDelete: SetNull)
@@ -284,6 +282,8 @@ model TabField {
   colSpan           Int              @default(1) @map("col_span")
   isRequired        Boolean          @default(false) @map("is_required")
   sectionTitle      String?          @map("section_title")
+  /** Розтягувати вузький віджет на частку рядка (разом з іншими stretch у цьому рядку). */
+  stretchInRow      Boolean          @default(false) @map("stretch_in_row")
   createdAt         DateTime         @default(now()) @map("created_at")
 
   @@unique([tabDefinitionId, fieldDefinitionId, productTypeId])

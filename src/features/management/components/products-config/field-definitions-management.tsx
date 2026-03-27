@@ -9,15 +9,27 @@ import {
   SheetTitle,
   SheetFooter,
 } from "@/components/ui/sheet";
+import { AlertDialogBody } from "@/components/ui/alert-dialog";
 import { SHEET_CONTENT_CLASS, SHEET_INPUT_CLASS, SHEET_HEADER_CLASS, SHEET_BODY_CLASS, SHEET_BODY_SCROLL_CLASS, SHEET_FOOTER_CLASS, SHEET_FORM_GAP, SHEET_FORM_PADDING, SHEET_FIELD_GAP } from "@/config/sheet";
 import {
   Table,
   TableBody,
   TableCell,
+  TableCellText,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MgmtTableColGroup } from "@/components/mgmt-table-colgroup";
+import {
+  MGMT_COLGROUP_5_FIELD_DEFS,
+  mgmtTableLayoutClass,
+  mgmtTableHeaderRowClass,
+  mgmtTableHeadClass,
+  mgmtTableCellPrimaryClass,
+  mgmtTableCellMutedSmClass,
+  mgmtTableCellNumericClass,
+} from "@/config/management-table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,37 +40,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Search,
-  Plus,
-  Loader2,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronDown,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Search, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
+import { MANAGEMENT_STALE_MS, managementAdminKeys, managementTabKeys } from "@/lib/query-keys";
+import { productConfigQueryKeys } from "@/features/products/hooks/use-product-config";
+import { listConfigQueryKeys } from "@/features/products/hooks/use-list-config";
 import { slugify } from "@/lib/slugify";
 import {
   WIDGET_TYPES,
@@ -102,35 +91,26 @@ import {
   validateFormula,
 } from "@/features/products/lib/field-utils";
 import { useLocale } from "@/lib/locale-provider";
+import { fetchAdminCategories, fetchAdminProductTypes } from "@/lib/api/admin/catalog";
+import { adminGetJson, adminMutationJson, adminDeleteAllowMissing } from "@/lib/api/admin/client";
+import { invalidateCategoryDisplayCaches } from "@/lib/invalidate-display-caches";
 import { TableWithPagination } from "@/components/table-with-pagination";
+import { TablePaginationBar } from "@/components/table-pagination-bar";
+import { ManagementListLoading, TableEmptyMessageRow } from "@/components/management-list-states";
 import type { FieldDefinitionItem } from "./types";
-
-const FIELD_DEFS_KEY = ["admin", "field-definitions"] as const;
-const CATEGORIES_KEY = ["admin", "categories"] as const;
-const PRODUCT_TYPES_KEY = ["admin", "product-types"] as const;
 
 async function fetchCategories(
   t: (key: string) => string
 ): Promise<{ id: string; name: string; order: number }[]> {
-  const res = await fetch("/api/admin/categories");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadCategoriesFailed"));
-  }
-  const data = await res.json();
-  return data.categories ?? data ?? [];
+  return fetchAdminCategories(t) as Promise<{ id: string; name: string; order: number }[]>;
 }
 
 async function fetchProductTypes(
   t: (key: string) => string
 ): Promise<{ id: string; name: string; categoryId: string | null }[]> {
-  const res = await fetch("/api/admin/product-types");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadTypesFailed"));
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data : (data?.productTypes ?? data?.vehicleTypes ?? []);
+  return fetchAdminProductTypes(t) as Promise<
+    { id: string; name: string; categoryId: string | null }[]
+  >;
 }
 
 const PAGE_SIZES = [10, 20, 50] as const;
@@ -152,12 +132,10 @@ async function fetchFieldDefinitions(
   if (params.productTypeId) searchParams.set("productTypeId", params.productTypeId);
   searchParams.set("page", String(params.page));
   searchParams.set("pageSize", String(params.pageSize));
-  const res = await fetch(`/api/admin/field-definitions?${searchParams.toString()}`);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("fieldDefinitions.loadFieldsFailed"));
-  }
-  const data = await res.json();
+  const data = await adminGetJson<{
+    fieldDefinitions?: FieldDefinitionItem[];
+    total?: number;
+  }>(`/field-definitions?${searchParams.toString()}`, t("fieldDefinitions.loadFieldsFailed"));
   return {
     fieldDefinitions: data.fieldDefinitions ?? [],
     total: data.total ?? 0,
@@ -182,14 +160,11 @@ async function createFieldDefinition(
   },
   t: (key: string) => string
 ) {
-  const res = await fetch("/api/admin/field-definitions", {
+  return adminMutationJson("/field-definitions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("fieldDefinitions.createFieldFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("fieldDefinitions.createFieldFailed"));
-  return data;
 }
 
 async function updateFieldDefinition(
@@ -211,24 +186,39 @@ async function updateFieldDefinition(
   },
   t: (key: string) => string
 ) {
-  const res = await fetch(`/api/admin/field-definitions/${id}`, {
+  return adminMutationJson(`/field-definitions/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("fieldDefinitions.saveFieldFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("fieldDefinitions.saveFieldFailed"));
-  return data;
 }
 
 async function deleteFieldDefinition(id: string, t: (key: string) => string) {
-  const res = await fetch(`/api/admin/field-definitions/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("fieldDefinitions.deleteFieldFailed"));
-  }
+  await adminDeleteAllowMissing(
+    `/field-definitions/${id}`,
+    t("fieldDefinitions.deleteFieldFailed")
+  );
+}
+
+type FieldDefinitionDeleteUsageResponse = {
+  usage: {
+    tabPlacements: Array<{
+      categoryName: string;
+      tabName: string;
+      productTypeName: string | null;
+    }>;
+    productValuesCount: number;
+  };
+};
+
+async function fetchFieldDefinitionDeleteUsage(
+  id: string,
+  t: (key: string) => string
+): Promise<FieldDefinitionDeleteUsageResponse> {
+  return adminGetJson<FieldDefinitionDeleteUsageResponse>(
+    `/field-definitions/${id}?usage=1`,
+    t("fieldDefinitions.loadFieldsFailed")
+  );
 }
 
 type FieldDefinitionsManagementProps = {
@@ -245,7 +235,7 @@ export function FieldDefinitionsManagement({
   onClearCreateIntent,
 }: FieldDefinitionsManagementProps = {}) {
   const queryClient = useQueryClient();
-  const { t } = useLocale();
+  const { t, tFormat } = useLocale();
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedField, setSelectedField] =
@@ -280,6 +270,7 @@ export function FieldDefinitionsManagement({
     open: boolean;
     newDataType: string;
   }>({ open: false, newDataType: "" });
+  const [fieldDeleteDialogOpen, setFieldDeleteDialogOpen] = useState(false);
 
   const listParams = useMemo(
     () => ({
@@ -298,7 +289,7 @@ export function FieldDefinitionsManagement({
     isError,
     error,
   } = useQuery({
-    queryKey: [...FIELD_DEFS_KEY, listParams],
+    queryKey: [...managementAdminKeys.fieldDefinitions, listParams],
     queryFn: () => fetchFieldDefinitions(listParams, t),
     staleTime: MANAGEMENT_STALE_MS,
     placeholderData: keepPreviousData,
@@ -309,7 +300,7 @@ export function FieldDefinitionsManagement({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const { data: categories = [] } = useQuery({
-    queryKey: [...CATEGORIES_KEY],
+    queryKey: [...managementAdminKeys.categories],
     queryFn: () => fetchCategories(t),
     staleTime: MANAGEMENT_STALE_MS,
   });
@@ -319,7 +310,7 @@ export function FieldDefinitionsManagement({
   );
 
   const { data: allProductTypes = [] } = useQuery({
-    queryKey: [...PRODUCT_TYPES_KEY],
+    queryKey: [...managementAdminKeys.productTypes],
     queryFn: () => fetchProductTypes(t),
     staleTime: MANAGEMENT_STALE_MS,
   });
@@ -375,19 +366,60 @@ export function FieldDefinitionsManagement({
     [totalPages]
   );
 
-  const invalidateProductCardConfig = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["product-config"] });
-    queryClient.invalidateQueries({ queryKey: ["list-config"] });
-    queryClient.invalidateQueries({ queryKey: ["admin", "tab-detail"] });
-    queryClient.invalidateQueries({ queryKey: ["admin", "category-tabs"] });
-  }, [queryClient]);
+  const applyFieldScopeToDisplayCaches = useCallback(
+    (categoryIds: string[], productTypeIds: string[]) => {
+      const hasScope = categoryIds.length > 0 || productTypeIds.length > 0;
+      if (!hasScope) {
+        void queryClient.invalidateQueries({ queryKey: productConfigQueryKeys.all });
+        void queryClient.invalidateQueries({ queryKey: listConfigQueryKeys.all });
+        void queryClient.invalidateQueries({ queryKey: managementTabKeys.allTabDetails });
+        void queryClient.invalidateQueries({ queryKey: managementTabKeys.allCategoryTabs });
+        return;
+      }
+
+      const byCat = new Map<string, Set<string>>();
+      const ensureCat = (catId: string) => {
+        if (!byCat.has(catId)) byCat.set(catId, new Set());
+        return byCat.get(catId)!;
+      };
+
+      for (const catId of categoryIds) {
+        const typesInCat = allProductTypes.filter((pt) => pt.categoryId === catId);
+        const picked =
+          productTypeIds.length === 0
+            ? typesInCat.map((pt) => pt.id)
+            : typesInCat
+                .filter((pt) => productTypeIds.includes(pt.id))
+                .map((pt) => pt.id);
+        if (picked.length === 0) {
+          invalidateCategoryDisplayCaches(queryClient, catId, []);
+        } else {
+          const set = ensureCat(catId);
+          for (const tid of picked) set.add(tid);
+        }
+      }
+
+      for (const ptId of productTypeIds) {
+        const pt = allProductTypes.find((x) => x.id === ptId);
+        if (pt?.categoryId) ensureCat(pt.categoryId).add(ptId);
+      }
+
+      for (const [catId, typeSet] of byCat) {
+        invalidateCategoryDisplayCaches(queryClient, catId, [...typeSet]);
+        void queryClient.invalidateQueries({
+          queryKey: managementTabKeys.categoryTabs(catId),
+        });
+      }
+    },
+    [queryClient, allProductTypes]
+  );
 
   const createMut = useMutation({
     mutationFn: (body: Parameters<typeof createFieldDefinition>[0]) =>
       createFieldDefinition(body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FIELD_DEFS_KEY });
-      invalidateProductCardConfig();
+    onSuccess: (_created, body) => {
+      void queryClient.invalidateQueries({ queryKey: managementAdminKeys.fieldDefinitions });
+      applyFieldScopeToDisplayCaches(body.categoryIds ?? [], body.productTypeIds ?? []);
       toast.success(t("toasts.fieldCreated"));
     },
   });
@@ -399,19 +431,80 @@ export function FieldDefinitionsManagement({
     }: {
       id: string;
       body: Parameters<typeof updateFieldDefinition>[1];
+      prevCategoryIds: string[];
+      prevProductTypeIds: string[];
     }) => updateFieldDefinition(id, body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FIELD_DEFS_KEY });
-      invalidateProductCardConfig();
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.fieldDefinitions });
+      const key = [...managementAdminKeys.fieldDefinitions, listParams] as const;
+      const prev = queryClient.getQueryData<{
+        fieldDefinitions: FieldDefinitionItem[];
+        total: number;
+      }>(key);
+      if (!prev) return { prev: undefined, key };
+      const { id, body } = variables;
+      const next = prev.fieldDefinitions.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              ...(body.label !== undefined && { label: body.label }),
+              ...(body.code !== undefined && { code: body.code }),
+              ...(body.dataType !== undefined && { dataType: body.dataType }),
+              ...(body.widgetType !== undefined && { widgetType: body.widgetType }),
+              ...(body.systemColumn !== undefined && { systemColumn: body.systemColumn }),
+              ...(body.presetValues !== undefined && { presetValues: body.presetValues }),
+              ...(body.validation !== undefined && { validation: body.validation }),
+              ...(body.unit !== undefined && { unit: body.unit }),
+              ...(body.defaultValue !== undefined && { defaultValue: body.defaultValue }),
+              ...(body.placeholder !== undefined && { placeholder: body.placeholder }),
+              ...(body.hiddenOnCard !== undefined && { hiddenOnCard: body.hiddenOnCard }),
+              ...(body.categoryIds !== undefined && { categoryIds: body.categoryIds }),
+              ...(body.productTypeIds !== undefined && { productTypeIds: body.productTypeIds }),
+            }
+          : f
+      );
+      queryClient.setQueryData(key, { ...prev, fieldDefinitions: next });
+      return { prev, key };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev != null && ctx.key) queryClient.setQueryData(ctx.key, ctx.prev);
+    },
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: managementAdminKeys.fieldDefinitions });
+      const { body, prevCategoryIds, prevProductTypeIds } = variables;
+      const cats = new Set([...prevCategoryIds, ...(body.categoryIds ?? [])]);
+      const types = new Set([...prevProductTypeIds, ...(body.productTypeIds ?? [])]);
+      applyFieldScopeToDisplayCaches([...cats], [...types]);
       toast.success(t("toasts.fieldSaved"));
     },
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => deleteFieldDefinition(id, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: FIELD_DEFS_KEY });
-      invalidateProductCardConfig();
+    mutationFn: (vars: {
+      id: string;
+      categoryIds: string[];
+      productTypeIds: string[];
+    }) => deleteFieldDefinition(vars.id, t),
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.fieldDefinitions });
+      const key = [...managementAdminKeys.fieldDefinitions, listParams] as const;
+      const prev = queryClient.getQueryData<{
+        fieldDefinitions: FieldDefinitionItem[];
+        total: number;
+      }>(key);
+      if (!prev) return { prev: undefined, key };
+      queryClient.setQueryData(key, {
+        fieldDefinitions: prev.fieldDefinitions.filter((f) => f.id !== vars.id),
+        total: Math.max(0, prev.total - 1),
+      });
+      return { prev, key };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev != null && ctx.key) queryClient.setQueryData(ctx.key, ctx.prev);
+    },
+    onSuccess: (_void, vars) => {
+      void queryClient.invalidateQueries({ queryKey: managementAdminKeys.fieldDefinitions });
+      applyFieldScopeToDisplayCaches(vars.categoryIds, vars.productTypeIds);
       toast.success(t("toasts.fieldDeleted"));
     },
   });
@@ -573,11 +666,19 @@ export function FieldDefinitionsManagement({
     }
   }, [dataTypeChangeModal, applyDataTypeChange]);
 
-  const canDelete =
-    !isCreate &&
-    selectedField &&
-    !selectedField.isSystem &&
-    (selectedField._count?.tabFields ?? 0) === 0;
+  const showFieldDeleteButton =
+    !isCreate && selectedField != null && !selectedField.isSystem;
+
+  const fieldIdForDeleteUsage = fieldDeleteDialogOpen
+    ? selectedField?.id
+    : undefined;
+  const { data: fieldDeleteUsage, isFetching: fieldDeleteUsageLoading } =
+    useQuery({
+      queryKey: [...managementAdminKeys.fieldDefinitions, "delete-usage", fieldIdForDeleteUsage],
+      queryFn: () =>
+        fetchFieldDefinitionDeleteUsage(fieldIdForDeleteUsage!, t),
+      enabled: Boolean(fieldIdForDeleteUsage),
+    });
 
   const needsFormula = WIDGETS_WITH_FORMULA.includes(widgetType);
   const needsValidation = !WIDGETS_WITHOUT_VALIDATION.includes(widgetType);
@@ -661,7 +762,12 @@ export function FieldDefinitionsManagement({
           categoryIds: fieldCategoryIds,
           productTypeIds: fieldProductTypeIds,
         };
-        await updateMut.mutateAsync({ id: selectedField.id, body });
+        await updateMut.mutateAsync({
+          id: selectedField.id,
+          body,
+          prevCategoryIds: selectedField.categoryIds ?? [],
+          prevProductTypeIds: selectedField.productTypeIds ?? [],
+        });
       }
       closeSheet();
     } catch (e) {
@@ -671,16 +777,20 @@ export function FieldDefinitionsManagement({
     }
   };
 
-  const handleDelete = async () => {
+  const confirmDeleteField = async () => {
     if (!selectedField || deleteMut.isPending) return;
-    setSaving(true);
     try {
-      await deleteMut.mutateAsync(selectedField.id);
+      await deleteMut.mutateAsync({
+        id: selectedField.id,
+        categoryIds: selectedField.categoryIds ?? [],
+        productTypeIds: selectedField.productTypeIds ?? [],
+      });
+      setFieldDeleteDialogOpen(false);
       closeSheet();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t("errors.deleteFailed"));
-    } finally {
-      setSaving(false);
+      toast.error(
+        e instanceof Error ? e.message : t("errors.deleteFailed")
+      );
     }
   };
 
@@ -689,9 +799,6 @@ export function FieldDefinitionsManagement({
     total === 0 && !search.trim()
       ? t("fieldDefinitions.emptyCreate")
       : t("common.emptySearch");
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -739,135 +846,51 @@ export function FieldDefinitionsManagement({
       )}
 
       {isLoading && !fieldDefinitions.length ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <ManagementListLoading />
       ) : (
         <TableWithPagination
           pagination={
-            <>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                  aria-label={t("common.pagination.ariaFirstPage")}
-                  disabled={!canPrev}
-                  onClick={() => goToPage(1)}
-                >
-                  <ChevronsLeft className="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                  aria-label={t("common.pagination.ariaPrevPage")}
-                  disabled={!canPrev}
-                  onClick={() => goToPage(page - 1)}
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="flex items-center gap-1.5 px-2 text-sm text-muted-foreground">
-                  {t("common.pagination.page")}
-                  <Input
-                    type="number"
-                    min={1}
-                    max={totalPages}
-                    value={pageInputValue}
-                    onChange={(e) => setPageInputValue(e.target.value)}
-                    onBlur={handlePageInputBlur}
-                    onKeyDown={handlePageInputKeyDown}
-                    className="h-8 w-14 text-center"
-                    aria-label={t("common.pagination.ariaPageNumber")}
-                  />
-                  {t("common.pagination.pageOf")} {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                  aria-label={t("common.pagination.ariaNextPage")}
-                  disabled={!canNext}
-                  onClick={() => goToPage(page + 1)}
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                  aria-label={t("common.pagination.ariaLastPage")}
-                  disabled={!canNext}
-                  onClick={() => goToPage(totalPages)}
-                >
-                  <ChevronsRight className="size-4" />
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>{t("common.pagination.rowsPerPage")}</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="default"
-                      className="gap-2 min-w-[4.5rem] justify-between"
-                      aria-label={t("common.pagination.ariaRowsPerPage")}
-                    >
-                      {pageSize}
-                      <ChevronDown className="size-4 opacity-50" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuRadioGroup
-                      value={String(pageSize)}
-                      onValueChange={(v) => {
-                        setPageSize(Number(v));
-                        setPage(1);
-                      }}
-                    >
-                      {PAGE_SIZES.map((n) => (
-                        <DropdownMenuRadioItem key={n} value={String(n)}>
-                          {n}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </>
+            <TablePaginationBar
+              page={page}
+              totalPages={totalPages}
+              pageInputValue={pageInputValue}
+              onPageInputChange={setPageInputValue}
+              onPageInputBlur={handlePageInputBlur}
+              onPageInputKeyDown={handlePageInputKeyDown}
+              goToPage={goToPage}
+              pageSize={pageSize}
+              pageSizes={PAGE_SIZES}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+            />
           }
         >
-          <Table className="w-full table-fixed">
+          <Table className={mgmtTableLayoutClass}>
+            <MgmtTableColGroup widths={MGMT_COLGROUP_5_FIELD_DEFS} />
             <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="h-11 px-3 text-left align-middle">
+              <TableRow className={mgmtTableHeaderRowClass}>
+                <TableHead className={mgmtTableHeadClass}>
                   {t("fieldDefinitions.name")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle hidden sm:table-cell">
+                <TableHead className={`${mgmtTableHeadClass} hidden sm:table-cell`}>
                   {t("fieldDefinitions.code")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle w-28">
+                <TableHead className={mgmtTableHeadClass}>
                   {t("fieldDefinitions.dataType")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle w-32">
+                <TableHead className={mgmtTableHeadClass}>
                   {t("fieldDefinitions.display")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle w-28">
+                <TableHead className={mgmtTableHeadClass}>
                   {t("fieldDefinitions.usagesCount")}
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isEmpty ? (
-                <TableRow key="empty" className="hover:bg-transparent">
-                  <TableCell plain colSpan={5} className="h-24 align-middle">
-                    <div className="flex min-h-[8rem] w-full flex-col items-center justify-center gap-2 py-10 text-center">
-                      <p className="text-sm text-muted-foreground px-4">
-                        {emptyMessage}
-                      </p>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <TableEmptyMessageRow colSpan={5}>{emptyMessage}</TableEmptyMessageRow>
               ) : (
                 fieldDefinitions.map((fd) => (
                   <TableRow
@@ -875,20 +898,24 @@ export function FieldDefinitionsManagement({
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => openForEdit(fd)}
                   >
-                    <TableCell className="h-11 px-3 text-left align-middle font-medium">
-                      {fd.label}
+                    <TableCell className={mgmtTableCellPrimaryClass} title={fd.label}>
+                      <TableCellText>{fd.label}</TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm hidden sm:table-cell">
-                      {fd.code ?? "—"}
+                    <TableCell className={`${mgmtTableCellMutedSmClass} hidden sm:table-cell`} title={fd.code ?? undefined}>
+                      <TableCellText>{fd.code ?? "—"}</TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm">
-                      {fd.widgetType === "composite" ? "—" : (t(`dataTypes.${fd.dataType}`) ?? fd.dataType)}
+                    <TableCell className={mgmtTableCellMutedSmClass}>
+                      <TableCellText>
+                        {fd.widgetType === "composite" ? "—" : (t(`dataTypes.${fd.dataType}`) ?? fd.dataType)}
+                      </TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm">
-                      {t(`widgetTypesShort.${fd.widgetType}`) || t(`widgetTypes.${fd.widgetType}`) || fd.widgetType}
+                    <TableCell className={mgmtTableCellMutedSmClass}>
+                      <TableCellText>
+                        {t(`widgetTypesShort.${fd.widgetType}`) || t(`widgetTypes.${fd.widgetType}`) || fd.widgetType}
+                      </TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm tabular-nums">
-                      {fd._count?.tabFields ?? 0}
+                    <TableCell className={mgmtTableCellNumericClass}>
+                      <TableCellText className="tabular-nums">{fd._count?.tabFields ?? 0}</TableCellText>
                     </TableCell>
                   </TableRow>
                 ))
@@ -1533,20 +1560,17 @@ export function FieldDefinitionsManagement({
           <SheetFooter className={SHEET_FOOTER_CLASS}>
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
               <div>
-                {canDelete && (
+                {showFieldDeleteButton ? (
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={handleDelete}
+                    onClick={() => setFieldDeleteDialogOpen(true)}
                     disabled={saving || deleteMut.isPending}
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                   >
-                    {saving && deleteMut.isPending ? (
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                    ) : null}
                     {t("productsConfig.common.delete")}
                   </Button>
-                )}
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -1569,27 +1593,83 @@ export function FieldDefinitionsManagement({
         </SheetContent>
       </Sheet>
 
-      <AlertDialog
+      <ConfirmDestructiveDialog
         open={dataTypeChangeModal.open}
         onOpenChange={(open) =>
           !open && setDataTypeChangeModal({ open: false, newDataType: "" })
         }
+        title={t("fieldDefinitions.dataTypeChangeTitle")}
+        description={t("fieldDefinitions.dataTypeChangeDesc")}
+        cancelLabel={t("productsConfig.common.cancel")}
+        confirmLabel={t("fieldDefinitions.continue")}
+        confirmTone="default"
+        onConfirm={confirmDataTypeChange}
+      />
+
+      <ConfirmDestructiveDialog
+        open={fieldDeleteDialogOpen}
+        onOpenChange={setFieldDeleteDialogOpen}
+        title={
+          selectedField
+            ? tFormat("fieldDefinitions.deleteConfirmTitle", {
+                label: selectedField.label,
+              })
+            : ""
+        }
+        description={t("fieldDefinitions.deleteConfirmDescription")}
+        cancelLabel={t("productsConfig.common.cancel")}
+        confirmLabel={t("productsConfig.common.delete")}
+        confirmPending={deleteMut.isPending}
+        confirmPendingLabel={t("productsConfig.common.deleting")}
+        onConfirm={confirmDeleteField}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("fieldDefinitions.dataTypeChangeTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("fieldDefinitions.dataTypeChangeDesc")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("productsConfig.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDataTypeChange}>
-              {t("fieldDefinitions.continue")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {fieldDeleteUsageLoading ? (
+          <AlertDialogBody>
+            <p className="text-sm text-muted-foreground">
+              {t("fieldDefinitions.deleteConfirmUsageLoading")}
+            </p>
+          </AlertDialogBody>
+        ) : fieldDeleteUsage?.usage ? (
+          <AlertDialogBody className="max-h-[40vh] overflow-y-auto">
+            <p className="text-sm font-medium">
+              {t("fieldDefinitions.deleteConfirmTabsHeading")}
+            </p>
+            {fieldDeleteUsage.usage.tabPlacements.length === 0 ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("fieldDefinitions.deleteConfirmNoTabs")}
+              </p>
+            ) : (
+              <ul className="mt-2 list-inside list-disc space-y-1 text-sm">
+                {fieldDeleteUsage.usage.tabPlacements.map((p, i) => {
+                  const typePart = p.productTypeName
+                    ? tFormat("fieldDefinitions.deleteConfirmTypePart", {
+                        name: p.productTypeName,
+                      })
+                    : "";
+                  return (
+                    <li key={`${p.categoryName}-${p.tabName}-${i}`}>
+                      {tFormat("fieldDefinitions.deleteConfirmTabLine", {
+                        category: p.categoryName,
+                        tab: p.tabName,
+                        typePart,
+                      })}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {fieldDeleteUsage.usage.productValuesCount > 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                {tFormat("fieldDefinitions.deleteConfirmValues", {
+                  count: String(
+                    fieldDeleteUsage.usage.productValuesCount
+                  ),
+                })}
+              </p>
+            ) : null}
+          </AlertDialogBody>
+        ) : null}
+      </ConfirmDestructiveDialog>
     </div>
   );
 }

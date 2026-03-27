@@ -17,18 +17,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogBody,
-} from "@/components/ui/alert-dialog";
-import { SHEET_CONTENT_CLASS, SHEET_HEADER_CLASS, SHEET_BODY_CLASS, SHEET_FOOTER_CLASS, SHEET_TABS_GAP, SHEET_TABS_CONTENT_MT, SHEET_SCROLL_CLASS, SHEET_FORM_PADDING, PRODUCT_CARD_GRID_GAP } from "@/config/sheet";
+  SHEET_CONTENT_CLASS,
+  SHEET_HEADER_CLASS,
+  SHEET_BODY_CLASS,
+  SHEET_FOOTER_CLASS,
+  SHEET_TAB_TRIGGER_CLASS,
+  SHEET_TABS_GAP,
+  SHEET_TABS_CONTENT_MT,
+  SHEET_SCROLL_CLASS,
+  SHEET_FORM_PADDING,
+  PRODUCT_CARD_GRID_GAP,
+} from "@/config/sheet";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollableTabsList } from "@/components/ui/scrollable-tabs-list";
 import { Button } from "@/components/ui/button";
@@ -37,10 +38,19 @@ import type { Product } from "../types";
 import { fetchProductById } from "../api";
 import { productsKeys, PRODUCT_DETAIL_STALE_MS } from "../queries";
 import { DynamicFieldRenderer } from "./dynamic-field-renderer";
-import { useProductConfig, type ProductConfigTab } from "../hooks/use-product-config";
+import {
+  useProductConfig,
+  productConfigQueryKeys,
+  type ProductConfigTab,
+} from "../hooks/use-product-config";
 import { SYSTEM_TAB_CONFIG } from "@/config/system-tab";
 import { useQuery } from "@tanstack/react-query";
-import { computeGridLayout, getGridColSpan, type GridField } from "../lib/grid-layout";
+import { computeGridLayout, type GridField } from "../lib/grid-layout";
+import {
+  buildProductCardSegments,
+  stretchGroupInnerGridClass,
+  stretchGroupParentColClass,
+} from "../lib/product-card-grid-segments";
 import { Plus, X } from "lucide-react";
 
 type ProductDetailSheetProps = {
@@ -73,8 +83,6 @@ type ProductDetailSheetProps = {
 const EMPTY_EDIT: Product = {
   id: 0,
   processed_file_id: null,
-  pdf_url: null,
-  brief_pdf_path: null,
   product_status_id: null,
   product_type_id: null,
   category_id: null,
@@ -160,8 +168,10 @@ function DynamicTabs({
     <Tabs value={configTabs.some((t) => t.id === activeTab) ? activeTab : defaultTab} onValueChange={setActiveTab} className={cn("flex min-h-0 flex-1 flex-col", SHEET_TABS_GAP)}>
       <ScrollableTabsList variant="line">
         {configTabs.map((tab) => (
-          <TabsTrigger key={tab.id} value={tab.id} className="flex-1 min-w-0 shrink-0 text-xs sm:text-sm">
-            {tab.isSystem ? t(SYSTEM_TAB_CONFIG.nameI18nKey) : tab.name}
+          <TabsTrigger key={tab.id} value={tab.id} className={SHEET_TAB_TRIGGER_CLASS}>
+            <span className="min-w-0 truncate">
+              {tab.isSystem ? t(SYSTEM_TAB_CONFIG.nameI18nKey) : tab.name}
+            </span>
           </TabsTrigger>
         ))}
       </ScrollableTabsList>
@@ -177,33 +187,39 @@ function DynamicTabs({
           }, new Map<string, (typeof tab.fields)[number]>()).values()
         );
         const fieldById = new Map(dedupedFields.map((f) => [f.fieldDefinitionId, f]));
-        const gridItems = previewMode
-          ? computeGridLayout(
-              dedupedFields.map((f): GridField => ({
-                fieldDefinitionId: f.fieldDefinitionId,
-                colSpan: f.colSpan,
-                order: f.order,
-                label: f.fieldDefinition.label,
-                code: f.fieldDefinition.code,
-                widgetType: f.fieldDefinition.widgetType,
-                targetRow: (f as { targetRow?: number }).targetRow,
-                targetCol: (f as { targetCol?: number }).targetCol,
-              })),
-              3
-            )
-          : null;
+        const gridFields: GridField[] = dedupedFields.map((f): GridField => ({
+          fieldDefinitionId: f.fieldDefinitionId,
+          colSpan: f.colSpan,
+          order: f.order,
+          label: f.fieldDefinition.label,
+          code: f.fieldDefinition.code,
+          widgetType: f.fieldDefinition.widgetType,
+          targetRow: (f as { targetRow?: number }).targetRow,
+          targetCol: (f as { targetCol?: number }).targetCol,
+        }));
+        /** Без полів у прев'ю все одно показуємо ряд сітки з «+» (computeGridLayout([], 3) дає 3 empty-клітинки). */
+        const gridItems =
+          dedupedFields.length > 0 || (previewMode && onClickAddField)
+            ? computeGridLayout(gridFields, 3)
+            : [];
+        const segments = buildProductCardSegments(gridItems, fieldById);
 
         return (
           <TabsContent key={tab.id} value={tab.id} className={cn(SHEET_TABS_CONTENT_MT, "flex-1 min-w-0 p-2 data-[state=inactive]:hidden", SHEET_SCROLL_CLASS)}>
             <div className={cn("grid grid-cols-1 sm:grid-cols-3", PRODUCT_CARD_GRID_GAP, "items-start", SHEET_FORM_PADDING)}>
-              {previewMode && gridItems
-                ? gridItems.map((item) => {
-                    if (item.type === "empty") {
+              {gridItems.length === 0 ? (
+                <p className="col-span-full text-sm text-muted-foreground py-8 text-center">
+                  {t("productDetail.noFields")}
+                </p>
+              ) : (
+                segments.map((seg) => {
+                  if (seg.kind === "empty") {
+                    if (previewMode) {
                       return (
                         <button
-                          key={`empty-${item.row}-${item.col}`}
+                          key={`empty-${seg.row}-${seg.col}`}
                           type="button"
-                          onClick={() => onClickAddField?.(tab.id, item.row, item.col)}
+                          onClick={() => onClickAddField?.(tab.id, seg.row, seg.col)}
                           disabled={saving}
                           className={cn(
                             "group flex min-h-[4.5rem] items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/20",
@@ -217,46 +233,62 @@ function DynamicTabs({
                         </button>
                       );
                     }
-                    const f = fieldById.get(item.field.fieldDefinitionId);
-                    if (!f) return null;
-                    const span = getGridColSpan(item.field.widgetType, item.field.colSpan, 3);
-                    const spanClass = span >= 3 ? "col-span-full" : span === 2 ? "sm:col-span-2" : "";
                     return (
-                      <div key={f.id} className={cn("group/field relative min-w-0", spanClass)}>
-                        <DynamicFieldRenderer
-                          field={f}
-                          product={edit}
-                          onUpdate={update}
-                          disabled={saving}
-                          tabActive={activeTab === tab.id}
-                          documentFolders={getDocumentFoldersForField(f, tab.tabConfig)}
-                          previewMode={previewMode}
-                        />
-                        {onRemoveField && (
-                          <button
-                            type="button"
-                            onClick={() => onRemoveField(tab.id, f.fieldDefinitionId)}
-                            disabled={saving}
-                            className={cn(
-                              "absolute -right-1.5 -top-1.5 z-10 rounded-full border bg-background p-0.5 shadow-sm",
-                              "text-muted-foreground/50 opacity-0 transition-opacity",
-                              "hover:bg-destructive/10 hover:text-destructive",
-                              "group-hover/field:opacity-100 focus-visible:opacity-100",
-                              saving && "pointer-events-none"
-                            )}
-                            title={t("users.delete")}
-                          >
-                            <X className="size-3" />
-                          </button>
+                      <div
+                        key={`empty-${seg.row}-${seg.col}-${tab.id}`}
+                        className="hidden min-h-0 w-full sm:block"
+                        aria-hidden
+                      />
+                    );
+                  }
+                  if (seg.kind === "stretchGroup") {
+                    return (
+                      <div
+                        key={`stretch-${seg.row}-${seg.fields.map((x) => x.id).join("-")}`}
+                        className={cn(
+                          "relative min-w-0",
+                          stretchGroupParentColClass(seg.parentColSpan)
                         )}
+                      >
+                        <div className={stretchGroupInnerGridClass(seg.fields.length)}>
+                          {seg.fields.map((f) => (
+                            <div key={f.id} className="group/field relative min-w-0">
+                              <DynamicFieldRenderer
+                                field={f}
+                                product={edit}
+                                onUpdate={update}
+                                disabled={saving}
+                                tabActive={activeTab === tab.id}
+                                documentFolders={getDocumentFoldersForField(f, tab.tabConfig)}
+                                previewMode={previewMode}
+                              />
+                              {previewMode && onRemoveField && (
+                                <button
+                                  type="button"
+                                  onClick={() => onRemoveField(tab.id, f.fieldDefinitionId)}
+                                  disabled={saving}
+                                  className={cn(
+                                    "absolute -right-1.5 -top-1.5 z-10 rounded-full border bg-background p-0.5 shadow-sm",
+                                    "text-muted-foreground/50 opacity-0 transition-opacity",
+                                    "hover:bg-destructive/10 hover:text-destructive",
+                                    "group-hover/field:opacity-100 focus-visible:opacity-100",
+                                    saving && "pointer-events-none"
+                                  )}
+                                  title={t("users.delete")}
+                                >
+                                  <X className="size-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     );
-                  })
-                : (
-                  <>
-                    {dedupedFields.map((f) => (
+                  }
+                  const f = seg.field;
+                  return (
+                    <div key={f.id} className={cn("group/field relative min-w-0", seg.spanClass)}>
                       <DynamicFieldRenderer
-                        key={f.id}
                         field={f}
                         product={edit}
                         onUpdate={update}
@@ -265,14 +297,27 @@ function DynamicTabs({
                         documentFolders={getDocumentFoldersForField(f, tab.tabConfig)}
                         previewMode={previewMode}
                       />
-                    ))}
-                    {dedupedFields.length === 0 && (
-                      <p className="col-span-full text-sm text-muted-foreground py-8 text-center">
-                        {t("productDetail.noFields")}
-                      </p>
-                    )}
-                  </>
-                )}
+                      {previewMode && onRemoveField && (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveField(tab.id, f.fieldDefinitionId)}
+                          disabled={saving}
+                          className={cn(
+                            "absolute -right-1.5 -top-1.5 z-10 rounded-full border bg-background p-0.5 shadow-sm",
+                            "text-muted-foreground/50 opacity-0 transition-opacity",
+                            "hover:bg-destructive/10 hover:text-destructive",
+                            "group-hover/field:opacity-100 focus-visible:opacity-100",
+                            saving && "pointer-events-none"
+                          )}
+                          title={t("users.delete")}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </TabsContent>
         );
@@ -311,7 +356,7 @@ export function ProductDetailSheet({
   const queryClient = useQueryClient();
 
   const { data: defaultProductType } = useQuery({
-    queryKey: ["product-config", "default-type"],
+    queryKey: productConfigQueryKeys.defaultType,
     queryFn: async () => {
       const res = await fetch("/api/product-config/default", { cache: "no-store" });
       if (!res.ok) return null;
@@ -507,37 +552,26 @@ export function ProductDetailSheet({
         </SheetContent>
       </Sheet>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{tFormat("productDetail.deleteTitle", { category: categoryLabel })}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("productDetail.deleteDescription")}
-              {product && (edit.brand || edit.model)
-                ? ` (${[edit.brand, edit.model].filter(Boolean).join(" ")})`
-                : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {deleteError && (
-            <AlertDialogBody>
-              <p className="text-sm text-destructive">{deleteError}</p>
-            </AlertDialogBody>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                handleDeleteConfirm();
-              }}
-              disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleting ? t("productsConfig.common.deleting") : t("users.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDestructiveDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title={tFormat("productDetail.deleteTitle", { category: categoryLabel })}
+        description={
+          <>
+            {t("productDetail.deleteDescription")}
+            {product && (edit.brand || edit.model)
+              ? ` (${[edit.brand, edit.model].filter(Boolean).join(" ")})`
+              : ""}
+          </>
+        }
+        errorMessage={deleteError}
+        cancelLabel={t("productsConfig.common.cancel")}
+        confirmLabel={t("users.delete")}
+        confirmPendingLabel={t("productsConfig.common.deleting")}
+        confirmPending={deleting}
+        cancelDisabled={deleting}
+        onConfirm={handleDeleteConfirm}
+      />
     </>
   );
 }

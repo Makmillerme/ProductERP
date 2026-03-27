@@ -22,6 +22,8 @@ export type ProductConfigTabField = {
   colSpan: number;
   isRequired: boolean;
   sectionTitle: string | null;
+  /** Розділити ширину рядка з іншими вузькими полями з цим прапорцем (2+ підряд). */
+  stretchInRow?: boolean;
   fieldDefinition: {
     id: string;
     code: string | null;
@@ -54,10 +56,12 @@ export type ProductConfigResponse = {
   } | null;
 };
 
-const productConfigKeys = {
+export const productConfigQueryKeys = {
   all: ["product-config"] as const,
   type: (productTypeId: string) =>
-    [...productConfigKeys.all, productTypeId] as const,
+    [...productConfigQueryKeys.all, productTypeId] as const,
+  /** Ключ для /api/product-config/default у product-detail-sheet */
+  defaultType: ["product-config", "default-type"] as const,
 };
 
 async function fetchProductConfig(
@@ -77,7 +81,7 @@ async function fetchProductConfig(
 
 export function useProductConfig(productTypeId: string | null) {
   return useQuery({
-    queryKey: productConfigKeys.type(productTypeId ?? ""),
+    queryKey: productConfigQueryKeys.type(productTypeId ?? ""),
     queryFn: () => fetchProductConfig(productTypeId!),
     enabled: !!productTypeId,
     staleTime: 5 * 60 * 1000,

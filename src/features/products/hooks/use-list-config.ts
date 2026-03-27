@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocale } from "@/lib/locale-provider";
+import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
 import type { ProductConfigResponse } from "./use-product-config";
 import type { ProductColumnConfig, ProductColumnId } from "../types";
 import { parseDisplayConfig } from "@/features/management/types/display-config";
@@ -11,10 +12,10 @@ type CategoryConfigResponse = ProductConfigResponse & {
   displayConfig?: string | null;
 };
 
-const listConfigKeys = {
+export const listConfigQueryKeys = {
   all: ["list-config"] as const,
   category: (categoryId: string) =>
-    [...listConfigKeys.all, categoryId] as const,
+    [...listConfigQueryKeys.all, categoryId] as const,
 };
 
 async function fetchCategoryConfig(
@@ -126,10 +127,10 @@ export type ListConfig = {
 export function useListConfig(categoryId: string | null) {
   const { t } = useLocale();
   const query = useQuery({
-    queryKey: listConfigKeys.category(categoryId ?? ""),
+    queryKey: listConfigQueryKeys.category(categoryId ?? ""),
     queryFn: () => fetchCategoryConfig(categoryId!, t),
     enabled: !!categoryId,
-    staleTime: 30 * 1000,
+    staleTime: MANAGEMENT_STALE_MS,
   });
 
   const listConfig = useMemo((): ListConfig | null => {

@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { useLocale } from "@/lib/locale-provider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Plus, FileText, FileImage, FileVideo, File, X, ExternalLink, Loader2, Folder } from "lucide-react";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
+import { ManagementListLoading } from "@/components/management-list-states";
 import { cn } from "@/lib/utils";
 import type { ProductDoc } from "@/config/product-documents";
 
@@ -56,11 +58,11 @@ function formatSize(bytes: number | null): string {
 
 type DocThumbnailProps = {
   doc: ProductDoc;
-  onDelete: (id: number) => void;
+  onRequestDelete: (doc: ProductDoc) => void;
   deleting: boolean;
 };
 
-function DocThumbnail({ doc, onDelete, deleting }: DocThumbnailProps) {
+function DocThumbnail({ doc, onRequestDelete, deleting }: DocThumbnailProps) {
   const { t } = useLocale();
   const isImage = doc.mimeType?.startsWith("image/");
   const shortName = doc.fileName.length > 18
@@ -93,7 +95,7 @@ function DocThumbnail({ doc, onDelete, deleting }: DocThumbnailProps) {
         <button
           type="button"
           disabled={deleting}
-          onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
+          onClick={(e) => { e.stopPropagation(); onRequestDelete(doc); }}
           className="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive/80 disabled:opacity-50"
           aria-label={t("productDocuments.ariaDelete")}
         >
@@ -177,7 +179,7 @@ type FolderSectionProps = {
   label: string;
   docs: ProductDoc[];
   productId: number;
-  onDocDeleted: (id: number) => void;
+  onRequestDeleteDoc: (doc: ProductDoc) => void;
   onDocUploaded: () => void;
   deletingId: number | null;
   addDisabled?: boolean;
@@ -188,7 +190,7 @@ function FolderSection({
   label,
   docs,
   productId,
-  onDocDeleted,
+  onRequestDeleteDoc,
   onDocUploaded,
   deletingId,
   addDisabled,
@@ -219,7 +221,7 @@ function FolderSection({
               <DocThumbnail
                 key={doc.id}
                 doc={doc}
-                onDelete={onDocDeleted}
+                onRequestDelete={onRequestDeleteDoc}
                 deleting={deletingId === doc.id}
               />
             ))}
@@ -251,9 +253,10 @@ type ProductDocumentsTabProps = {
 };
 
 export function ProductDocumentsTab({ productId, active, folders = [], previewMode }: ProductDocumentsTabProps) {
-  const { t } = useLocale();
+  const { t, tFormat } = useLocale();
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [docPendingDelete, setDocPendingDelete] = useState<ProductDoc | null>(null);
 
   const queryKey = useMemo(() => ["product-documents", productId], [productId]);
 
@@ -319,7 +322,7 @@ export function ProductDocumentsTab({ productId, active, folders = [], previewMo
             label={folder.label}
             docs={[]}
             productId={0}
-            onDocDeleted={() => {}}
+            onRequestDeleteDoc={() => {}}
             onDocUploaded={() => {}}
             deletingId={null}
             addDisabled
@@ -331,9 +334,10 @@ export function ProductDocumentsTab({ productId, active, folders = [], previewMo
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[10rem] items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
+      <ManagementListLoading
+        className="min-h-[10rem]"
+        screenReaderText={t("users.loading")}
+      />
     );
   }
 
@@ -349,19 +353,40 @@ export function ProductDocumentsTab({ productId, active, folders = [], previewMo
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {folders.map((folder) => (
-        <FolderSection
-          key={folder.id}
-          folderId={folder.id}
-          label={folder.label}
-          docs={docsByFolder[folder.id] ?? []}
-          productId={productId}
-          onDocDeleted={(id) => deleteMutation.mutate(id)}
-          onDocUploaded={handleRefetch}
-          deletingId={deletingId}
-        />
-      ))}
-    </div>
+    <>
+      <div className="flex flex-col gap-2">
+        {folders.map((folder) => (
+          <FolderSection
+            key={folder.id}
+            folderId={folder.id}
+            label={folder.label}
+            docs={docsByFolder[folder.id] ?? []}
+            productId={productId}
+            onRequestDeleteDoc={(doc) => setDocPendingDelete(doc)}
+            onDocUploaded={handleRefetch}
+            deletingId={deletingId}
+          />
+        ))}
+      </div>
+      <ConfirmDestructiveDialog
+        open={docPendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open) setDocPendingDelete(null);
+        }}
+        title={t("productDocuments.confirmDeleteTitle")}
+        description={
+          docPendingDelete
+            ? tFormat("productDocuments.confirmDeleteDescription", { fileName: docPendingDelete.fileName })
+            : undefined
+        }
+        cancelLabel={t("productsConfig.common.cancel")}
+        confirmLabel={t("users.delete")}
+        confirmPending={deleteMutation.isPending}
+        onConfirm={() => {
+          if (docPendingDelete) deleteMutation.mutate(docPendingDelete.id);
+          setDocPendingDelete(null);
+        }}
+      />
+    </>
   );
 }

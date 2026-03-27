@@ -12,11 +12,11 @@ import { type RolePermissionsMap } from "@/config/permissions";
 import { PERMISSION_SECTIONS, TOTAL_PERMISSIONS_COUNT } from "@/config/permissions";
 import { ADMIN_LABEL, ADMIN_ROLE, ADMIN_SYSTEM_ROLE_ID, OWNER_ROLE } from "@/config/roles";
 import { TableWithPagination } from "@/components/table-with-pagination";
+import { ManagementListLoading } from "@/components/management-list-states";
 import { RolesTable } from "./roles-table";
 import { RoleDetailSheet } from "./role-detail-sheet";
 import type { ApiRoleListItem, ApiRoleDetail } from "./types";
-
-const ROLES_QUERY_KEY = ["admin", "roles"] as const;
+import { managementAdminKeys } from "@/lib/query-keys";
 
 type TFn = (key: string) => string;
 
@@ -100,7 +100,7 @@ export function RolesManagement() {
   const [search, setSearch] = useState("");
 
   const { data: roles = [], isLoading, isError, error } = useQuery({
-    queryKey: ROLES_QUERY_KEY,
+    queryKey: managementAdminKeys.roles,
     queryFn: () => fetchRoles(t),
     enabled: isAdmin,
   });
@@ -162,7 +162,7 @@ export function RolesManagement() {
     isError: detailError,
     error: detailErrorObj,
   } = useQuery({
-    queryKey: ["admin", "roles", selectedRoleId],
+    queryKey: [...managementAdminKeys.roles, selectedRoleId] as const,
     queryFn: () => fetchRoleDetail(selectedRoleId!, t),
     enabled: isAdmin && !!selectedRoleId && selectedRoleId !== ADMIN_SYSTEM_ROLE_ID && !createOpen,
   });
@@ -184,7 +184,7 @@ export function RolesManagement() {
   const createMutation = useMutation({
     mutationFn: (data: Parameters<typeof createRole>[0]) => createRole(data, t),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: managementAdminKeys.roles });
       toast.success(t("toasts.roleCreated"));
     },
   });
@@ -192,11 +192,11 @@ export function RolesManagement() {
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Parameters<typeof updateRole>[1] }) =>
       updateRole(id, body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
-      if (selectedRoleId) {
-        queryClient.invalidateQueries({ queryKey: ["admin", "roles", selectedRoleId] });
-      }
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: managementAdminKeys.roles });
+      void queryClient.invalidateQueries({
+        queryKey: [...managementAdminKeys.roles, variables.id] as const,
+      });
       toast.success(t("toasts.permissionsSaved"));
     },
   });
@@ -278,7 +278,7 @@ export function RolesManagement() {
       )}
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground py-8">{t("roles.loading")}</p>
+        <ManagementListLoading screenReaderText={t("roles.loading")} />
       ) : (
         <TableWithPagination>
           <RolesTable

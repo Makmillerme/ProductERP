@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
@@ -15,48 +18,63 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableCellText,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MgmtTableColGroup } from "@/components/mgmt-table-colgroup";
+import {
+  MGMT_COLGROUP_5_PRODUCT_TYPES,
+  mgmtTableLayoutClass,
+  mgmtTableHeaderRowClass,
+  mgmtTableHeadClass,
+  mgmtTableCellClass,
+  mgmtTableCellPrimaryClass,
+  mgmtTableCellMutedSmClass,
+  mgmtTableCellMutedXsClass,
+  mgmtTableCellNumericClass,
+} from "@/config/management-table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Search, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/locale-provider";
+import { fetchAdminProductTypes } from "@/lib/api/admin/catalog";
+import { adminMutationJson, adminDeleteAllowMissing } from "@/lib/api/admin/client";
 import { TableWithPagination } from "@/components/table-with-pagination";
+import { ManagementListLoading, TableEmptyMessageRow } from "@/components/management-list-states";
 import { DeleteProductTypeDialog } from "./delete-product-type-dialog";
 import type { ProductTypeItem } from "./types";
 import { formatDateForDisplay } from "@/features/products/lib/field-utils";
-
-const PRODUCT_TYPES_KEY = ["admin", "product-types"] as const;
+import { managementAdminKeys } from "@/lib/query-keys";
 
 async function fetchProductTypes(
   t: (key: string) => string
 ): Promise<ProductTypeItem[]> {
-  const res = await fetch("/api/admin/product-types");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.productTypesConfig.loadFailed"));
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data : (data?.productTypes ?? data?.vehicleTypes ?? data ?? []);
+  return fetchAdminProductTypes(t, "productsConfig.productTypesConfig.loadFailed") as Promise<
+    ProductTypeItem[]
+  >;
 }
 
 async function createProductType(
   body: { name: string; description?: string | null },
   t: (key: string) => string
 ) {
-  const res = await fetch("/api/admin/product-types", {
+  return adminMutationJson("/product-types", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.productTypesConfig.createFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.productTypesConfig.createFailed"));
-  return data;
 }
 
 async function updateProductType(
@@ -64,25 +82,24 @@ async function updateProductType(
   body: { name?: string; description?: string | null },
   t: (key: string) => string
 ) {
-  const res = await fetch(`/api/admin/product-types/${id}`, {
+  return adminMutationJson(`/product-types/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.productTypesConfig.saveFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.productTypesConfig.saveFailed"));
-  return data;
 }
 
 async function deleteProductType(id: string, t: (key: string) => string) {
-  const res = await fetch(`/api/admin/product-types/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.productTypesConfig.deleteFailed"));
-  }
+  await adminDeleteAllowMissing(
+    `/product-types/${id}`,
+    t("productsConfig.productTypesConfig.deleteFailed")
+  );
 }
+
+type ProductTypeFormValues = {
+  name: string;
+  description: string;
+};
 
 export function ProductTypesManagement() {
   const { t } = useLocale();
@@ -94,9 +111,21 @@ export function ProductTypesManagement() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, t("validationRequired.productTypeName")),
+        description: z.string(),
+      }),
+    [t]
+  );
+
+  const form = useForm<ProductTypeFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: "", description: "" },
+  });
 
   const [pendingDeleteVt, setPendingDeleteVt] = useState<{
     id: string;
@@ -111,7 +140,7 @@ export function ProductTypesManagement() {
     isError,
     error,
   } = useQuery({
-    queryKey: PRODUCT_TYPES_KEY,
+    queryKey: managementAdminKeys.productTypes,
     queryFn: () => fetchProductTypes(t),
   });
 
@@ -136,8 +165,39 @@ export function ProductTypesManagement() {
   const createMut = useMutation({
     mutationFn: (body: Parameters<typeof createProductType>[0]) =>
       createProductType(body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PRODUCT_TYPES_KEY });
+    onMutate: async (body) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.productTypes });
+      const prev = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      if (!prev) return { prev: undefined, optimisticId: "" };
+      const optimisticId = `optimistic-vt-${Date.now()}`;
+      const optimistic: ProductTypeItem = {
+        id: optimisticId,
+        categoryId: null,
+        name: body.name.trim(),
+        description: body.description?.trim() ?? null,
+        isAutoDetected: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        _count: { products: 0 },
+      };
+      queryClient.setQueryData(managementAdminKeys.productTypes, [...prev, optimistic]);
+      return { prev, optimisticId };
+    },
+    onError: (_e, _b, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(managementAdminKeys.productTypes, ctx.prev);
+    },
+    onSuccess: (data, _body, ctx) => {
+      const row = data as ProductTypeItem;
+      const list = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      if (list && ctx?.optimisticId) {
+        queryClient.setQueryData(
+          managementAdminKeys.productTypes,
+          list.map((vt) => (vt.id === ctx.optimisticId ? row : vt))
+        );
+      } else {
+        void queryClient.invalidateQueries({ queryKey: managementAdminKeys.productTypes });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.productTypeCreated"));
     },
   });
@@ -145,16 +205,63 @@ export function ProductTypesManagement() {
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Parameters<typeof updateProductType>[1] }) =>
       updateProductType(id, body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PRODUCT_TYPES_KEY });
+    onMutate: async ({ id, body }) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.productTypes });
+      const prev = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      if (!prev) return { prev: undefined };
+      queryClient.setQueryData(
+        managementAdminKeys.productTypes,
+        prev.map((vt) =>
+          vt.id === id
+            ? {
+                ...vt,
+                ...(body.name !== undefined && { name: body.name }),
+                ...(body.description !== undefined && { description: body.description }),
+              }
+            : vt
+        )
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(managementAdminKeys.productTypes, ctx.prev);
+    },
+    onSuccess: (data, { id }) => {
+      const row = data as ProductTypeItem;
+      const list = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      if (list) {
+        queryClient.setQueryData(
+          managementAdminKeys.productTypes,
+          list.map((vt) => (vt.id === id ? { ...vt, ...row } : vt))
+        );
+      }
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.productTypeSaved"));
     },
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteProductType(id, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PRODUCT_TYPES_KEY });
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.productTypes });
+      const prev = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      const removed = prev?.find((vt) => vt.id === id);
+      if (prev) {
+        queryClient.setQueryData(
+          managementAdminKeys.productTypes,
+          prev.filter((vt) => vt.id !== id)
+        );
+      }
+      return { prev, removed };
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(managementAdminKeys.productTypes, ctx.prev);
+    },
+    onSuccess: (_void, _id, ctx) => {
+      if (ctx?.removed?.categoryId) {
+        void queryClient.invalidateQueries({ queryKey: managementAdminKeys.categories });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.productTypeDeleted"));
     },
   });
@@ -162,16 +269,14 @@ export function ProductTypesManagement() {
   const openForCreate = () => {
     setSelectedType(null);
     setIsCreate(true);
-    setName("");
-    setDescription("");
+    form.reset({ name: "", description: "" });
     setSheetOpen(true);
   };
 
   const openForEdit = (vt: ProductTypeItem) => {
     setSelectedType(vt);
     setIsCreate(false);
-    setName(vt.name);
-    setDescription(vt.description ?? "");
+    form.reset({ name: vt.name, description: vt.description ?? "" });
     setSheetOpen(true);
   };
 
@@ -179,27 +284,25 @@ export function ProductTypesManagement() {
     setSheetOpen(false);
     setSelectedType(null);
     setIsCreate(false);
+    form.reset({ name: "", description: "" });
   };
 
-  const handleSave = async () => {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      toast.error(t("validationRequired.productTypeName"));
-      return;
-    }
+  const onSubmit = async (values: ProductTypeFormValues) => {
+    const trimmedName = values.name.trim();
+    const desc = values.description.trim() || null;
     setSaving(true);
     try {
       if (isCreate) {
         await createMut.mutateAsync({
           name: trimmedName,
-          description: description.trim() || null,
+          description: desc,
         });
       } else if (selectedType) {
         await updateMut.mutateAsync({
           id: selectedType.id,
           body: {
             name: trimmedName,
-            description: description.trim() || null,
+            description: desc,
           },
         });
       }
@@ -257,32 +360,25 @@ export function ProductTypesManagement() {
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <ManagementListLoading />
       ) : (
         <TableWithPagination>
-          <Table className="w-full table-fixed">
+          <Table className={mgmtTableLayoutClass}>
+            <MgmtTableColGroup widths={MGMT_COLGROUP_5_PRODUCT_TYPES} />
             <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="h-11 px-3 text-left align-middle">{t("productsConfig.common.name")}</TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle hidden md:table-cell">
+              <TableRow className={mgmtTableHeaderRowClass}>
+                <TableHead className={mgmtTableHeadClass}>{t("productsConfig.common.name")}</TableHead>
+                <TableHead className={`${mgmtTableHeadClass} hidden md:table-cell`}>
                   {t("productsConfig.common.description")}
                 </TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle w-20">{t("productsConfig.productTypesConfig.productsCount")}</TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle w-28">{t("productsConfig.productTypesConfig.autoDetect")}</TableHead>
-                <TableHead className="h-11 px-3 text-left align-middle w-32">{t("productsConfig.productTypesConfig.createdAt")}</TableHead>
+                <TableHead className={mgmtTableHeadClass}>{t("productsConfig.productTypesConfig.productsCount")}</TableHead>
+                <TableHead className={mgmtTableHeadClass}>{t("productsConfig.productTypesConfig.autoDetect")}</TableHead>
+                <TableHead className={mgmtTableHeadClass}>{t("productsConfig.productTypesConfig.createdAt")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isEmpty ? (
-                <TableRow key="empty" className="hover:bg-transparent">
-                  <TableCell plain colSpan={5} className="h-24 align-middle">
-                    <div className="flex min-h-[8rem] w-full flex-col items-center justify-center gap-2 py-10 text-center">
-                      <p className="text-sm text-muted-foreground px-4">{emptyMessage}</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <TableEmptyMessageRow colSpan={5}>{emptyMessage}</TableEmptyMessageRow>
               ) : (
                 filtered.map((vt) => (
                   <TableRow
@@ -290,23 +386,25 @@ export function ProductTypesManagement() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => openForEdit(vt)}
                   >
-                    <TableCell className="h-11 px-3 text-left align-middle font-medium">
-                      {vt.name}
+                    <TableCell className={mgmtTableCellPrimaryClass} title={vt.name}>
+                      <TableCellText>{vt.name}</TableCellText>
                     </TableCell>
                     <TableCell
-                      className="h-11 px-3 text-left align-middle text-muted-foreground text-sm truncate hidden md:table-cell"
+                      className={`${mgmtTableCellMutedSmClass} hidden md:table-cell`}
                       title={vt.description ?? undefined}
                     >
-                      {vt.description ?? "—"}
+                      <TableCellText>{vt.description ?? "—"}</TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm tabular-nums">
-                      {vt._count?.products ?? 0}
+                    <TableCell className={mgmtTableCellNumericClass}>
+                      <TableCellText className="tabular-nums">{vt._count?.products ?? 0}</TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm">
-                      {vt.isAutoDetected ? t("productsConfig.productTypesConfig.yes") : t("productsConfig.productTypesConfig.no")}
+                    <TableCell className={mgmtTableCellMutedSmClass}>
+                      <TableCellText>
+                        {vt.isAutoDetected ? t("productsConfig.productTypesConfig.yes") : t("productsConfig.productTypesConfig.no")}
+                      </TableCellText>
                     </TableCell>
-                    <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-xs">
-                      {formatDateForDisplay(vt.createdAt)}
+                    <TableCell className={mgmtTableCellMutedXsClass}>
+                      <TableCellText>{formatDateForDisplay(vt.createdAt)}</TableCellText>
                     </TableCell>
                   </TableRow>
                 ))
@@ -328,69 +426,90 @@ export function ProductTypesManagement() {
             </SheetTitle>
           </SheetHeader>
 
-          <div className={SHEET_BODY_CLASS}>
-            <div className={SHEET_BODY_SCROLL_CLASS}>
-              <div className={cn("grid", SHEET_FORM_GAP, SHEET_FORM_PADDING)}>
-                <div className={cn("grid", SHEET_FIELD_GAP)}>
-                  <Label htmlFor="vt-name">{t("productsConfig.common.name")}</Label>
-                  <Input
-                    id="vt-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={t("productsConfig.productTypesConfig.namePlaceholder")}
-                    disabled={saving}
-                    className={SHEET_INPUT_CLASS}
-                  />
-                </div>
-                <div className={cn("grid", SHEET_FIELD_GAP)}>
-                  <Label htmlFor="vt-desc">{t("productsConfig.common.description")}</Label>
-                  <Textarea
-                    id="vt-desc"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder={t("productsConfig.productTypesConfig.descPlaceholder")}
-                    disabled={saving}
-                    rows={3}
-                    className={SHEET_INPUT_CLASS}
-                  />
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <div className={SHEET_BODY_CLASS}>
+                <div className={SHEET_BODY_SCROLL_CLASS}>
+                  <div className={cn("grid", SHEET_FORM_GAP, SHEET_FORM_PADDING)}>
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem className={cn("grid", SHEET_FIELD_GAP)}>
+                          <FormLabel>{t("productsConfig.common.name")}</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder={t("productsConfig.productTypesConfig.namePlaceholder")}
+                              disabled={saving}
+                              className={SHEET_INPUT_CLASS}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem className={cn("grid", SHEET_FIELD_GAP)}>
+                          <FormLabel>{t("productsConfig.common.description")}</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder={t("productsConfig.productTypesConfig.descPlaceholder")}
+                              disabled={saving}
+                              rows={3}
+                              className={SHEET_INPUT_CLASS}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <SheetFooter className={SHEET_FOOTER_CLASS}>
-            <div className="flex w-full flex-wrap items-center justify-between gap-2">
-              <div>
-                {!isCreate && selectedType && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleDelete}
-                    disabled={saving}
-                    className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    {t("productsConfig.common.delete")}
-                  </Button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={closeSheet}
-                  disabled={saving}
-                >
-                  {t("productsConfig.common.cancel")}
-                </Button>
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  ) : null}
-                  {isCreate ? t("productsConfig.common.create") : t("productsConfig.common.save")}
-                </Button>
-              </div>
-            </div>
-          </SheetFooter>
+              <SheetFooter className={SHEET_FOOTER_CLASS}>
+                <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                  <div>
+                    {!isCreate && selectedType && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleDelete}
+                        disabled={saving}
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        {t("productsConfig.common.delete")}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeSheet}
+                      disabled={saving}
+                    >
+                      {t("productsConfig.common.cancel")}
+                    </Button>
+                    <Button type="submit" disabled={saving}>
+                      {saving ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : null}
+                      {isCreate ? t("productsConfig.common.create") : t("productsConfig.common.save")}
+                    </Button>
+                  </div>
+                </div>
+              </SheetFooter>
+            </form>
+          </Form>
         </SheetContent>
       </Sheet>
       <DeleteProductTypeDialog

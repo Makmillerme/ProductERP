@@ -26,24 +26,13 @@ import {
   getCardViewMethod,
   setCardViewMethod,
 } from "@/lib/management-state";
-import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
+import { MANAGEMENT_STALE_MS, managementAdminKeys } from "@/lib/query-keys";
+import { fetchAdminCategories } from "@/lib/api/admin/catalog";
 import { TabsConfigManagement } from "./products-config/tabs-config-management";
 import { ProductCardPreviewModal } from "./product-card-preview-modal";
 import { DisplaySettingsManagement } from "./display-settings-management";
 
-const CATEGORIES_KEY = ["admin", "categories"] as const;
-
 type CategoryWithCount = { id: string; name: string; order: number; _count?: { productTypes: number; tabs: number } };
-
-async function fetchCategories(t: (key: string) => string): Promise<CategoryWithCount[]> {
-  const res = await fetch("/api/admin/categories");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadCategoriesFailed"));
-  }
-  const data = await res.json();
-  return data.categories ?? data ?? [];
-}
 
 const VIEW_METHODS = ["table", "kanban"] as const;
 type ViewMethod = (typeof VIEW_METHODS)[number];
@@ -54,8 +43,8 @@ export function DisplayPage() {
   const openAddTabRef = useRef<(() => void) | null>(null);
 
   const { data: categories = [] } = useQuery({
-    queryKey: [...CATEGORIES_KEY],
-    queryFn: () => fetchCategories(t),
+    queryKey: [...managementAdminKeys.categories],
+    queryFn: () => fetchAdminCategories(t) as Promise<CategoryWithCount[]>,
     staleTime: MANAGEMENT_STALE_MS,
   });
 

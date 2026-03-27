@@ -104,7 +104,7 @@ onUpdate(vehicleKey, (v === "" ? null : (Number.isNaN(parsed) ? null : parsed)) 
 - Плутанина: `isSystem` з API, але не використовується в UI (field-definitions-management).  
 - Немає чіткого мапінгу systemColumn → Product для всіх полів.
 
-**Рекомендація:** Залишити isSystem/systemColumn для сумісності з parser/import. Документувати мапінг systemColumn → Product в окремому файлі.
+**Рекомендація:** Залишити isSystem/systemColumn для canDelete. Документувати мапінг systemColumn → Product в окремому файлі.
 
 ### 4.2 Дублювання логіки
 

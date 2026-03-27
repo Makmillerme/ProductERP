@@ -20,11 +20,11 @@ export function TableWithPagination({
   return (
     <div
       className={cn(
-        "rounded-md border overflow-hidden",
+        "w-full min-w-0 max-w-full rounded-md border overflow-hidden",
         className
       )}
     >
-      <div className="p-2">{children}</div>
+      <div className="flex w-full min-w-0 justify-start p-2">{children}</div>
       {pagination && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2 bg-muted/20">
           {pagination}

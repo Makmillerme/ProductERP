@@ -5,6 +5,10 @@ import { XIcon } from "lucide-react"
 import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import {
+  mergeRefs,
+  OverlayPortalContainerProvider,
+} from "@/components/ui/overlay-portal-container"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -44,18 +48,38 @@ function SheetOverlay({
   )
 }
 
-function SheetContent({
-  className,
-  children,
-  side = "right",
-  showCloseButton = true,
-  onPointerDownOutside,
-  onInteractOutside,
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Content> & {
-  side?: "top" | "right" | "bottom" | "left"
-  showCloseButton?: boolean
-}) {
+const SheetContent = React.forwardRef<
+  React.ComponentRef<typeof SheetPrimitive.Content>,
+  React.ComponentProps<typeof SheetPrimitive.Content> & {
+    side?: "top" | "right" | "bottom" | "left"
+    showCloseButton?: boolean
+  }
+>(function SheetContent(
+  {
+    className,
+    children,
+    side = "right",
+    showCloseButton = true,
+    onPointerDownOutside,
+    onInteractOutside,
+    ...props
+  },
+  forwardedRef,
+) {
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(
+    null,
+  )
+  const setPortalContainerRef = React.useCallback((el: HTMLElement | null) => {
+    setPortalContainer(el)
+  }, [])
+  const contentRef = React.useMemo(
+    () =>
+      mergeRefs<React.ComponentRef<typeof SheetPrimitive.Content>>(
+        forwardedRef,
+        setPortalContainerRef,
+      ),
+    [forwardedRef, setPortalContainerRef],
+  )
   const preventCloseWhenCalculator = (e: { detail?: { originalEvent?: { target?: EventTarget | null } }; preventDefault: () => void }) => {
     const target = e.detail?.originalEvent?.target as HTMLElement | undefined
     if (target?.closest?.("[data-calculator-root]")) e.preventDefault()
@@ -64,6 +88,7 @@ function SheetContent({
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
+        ref={contentRef}
         data-slot="sheet-content"
         onPointerDownOutside={(ev) => {
           preventCloseWhenCalculator(ev)
@@ -87,7 +112,9 @@ function SheetContent({
         )}
         {...props}
       >
-        {children}
+        <OverlayPortalContainerProvider value={portalContainer}>
+          {children}
+        </OverlayPortalContainerProvider>
         {showCloseButton && (
           <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-[1.75rem] right-4 -translate-y-1/2 rounded-sm p-1.5 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
             <XIcon />
@@ -97,7 +124,8 @@ function SheetContent({
       </SheetPrimitive.Content>
     </SheetPortal>
   )
-}
+})
+SheetContent.displayName = "SheetContent"
 
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (

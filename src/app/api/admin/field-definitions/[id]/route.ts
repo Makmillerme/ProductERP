@@ -21,11 +21,12 @@ async function requireAdmin() {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const denied = await requireAdmin();
   if (denied) return denied;
 
   const { id } = await context.params;
+  const includeUsage = new URL(request.url).searchParams.get("usage") === "1";
 
   try {
     const field = await prisma.fieldDefinition.findUnique({
@@ -39,10 +40,42 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     const { fieldDefinitionCategories, fieldDefinitionProductTypes, ...rest } = field;
-    return NextResponse.json({
+    const payload = {
       ...rest,
       categoryIds: fieldDefinitionCategories.map((c) => c.categoryId),
       productTypeIds: fieldDefinitionProductTypes.map((p) => p.productTypeId),
+    };
+
+    if (!includeUsage) {
+      return NextResponse.json(payload);
+    }
+
+    const [placements, productValuesCount] = await Promise.all([
+      prisma.tabField.findMany({
+        where: { fieldDefinitionId: id },
+        select: {
+          tabDefinition: {
+            select: {
+              name: true,
+              category: { select: { name: true } },
+            },
+          },
+          productType: { select: { name: true } },
+        },
+      }),
+      prisma.productFieldValue.count({ where: { fieldDefinitionId: id } }),
+    ]);
+
+    return NextResponse.json({
+      ...payload,
+      usage: {
+        tabPlacements: placements.map((p) => ({
+          categoryName: p.tabDefinition.category.name,
+          tabName: p.tabDefinition.name,
+          productTypeName: p.productType?.name ?? null,
+        })),
+        productValuesCount,
+      },
     });
   } catch (e) {
     console.error("[GET /api/admin/field-definitions/[id]]", e);
@@ -181,14 +214,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     if (field.isSystem) {
       return NextResponse.json({ error: "Cannot delete system field" }, { status: 403 });
-    }
-
-    const usageCount = await prisma.tabField.count({ where: { fieldDefinitionId: id } });
-    if (usageCount > 0) {
-      return NextResponse.json(
-        { error: `Cannot delete: field is used in ${usageCount} tab(s)` },
-        { status: 409 },
-      );
     }
 
     await prisma.fieldDefinition.delete({ where: { id } });

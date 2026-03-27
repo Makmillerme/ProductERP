@@ -1,0 +1,1 @@
+У `statuses-management.tsx` колонка «Колір»: `TableCell` з `plain` + внутрішній `div` з `flex ... justify-center`, бо стандартна обгортка `TableCell` лише `items-center` без `justify-center`, тож `text-center` на `td` не центрує кружок.

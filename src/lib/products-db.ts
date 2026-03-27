@@ -28,8 +28,6 @@ type DbProductRow = {
   categoryId: string | null;
   productStatusId: string | null;
   processedFileId: number | null;
-  pdfUrl: string | null;
-  briefPdfPath: string | null;
   createdAt: Date;
   media?: DbProductMedia[];
 };
@@ -50,8 +48,6 @@ function rowToBaseProduct(row: DbProductRow): Omit<Product, "media"> & { media?:
   const base: Product = {
     id: row.id,
     processed_file_id: row.processedFileId,
-    pdf_url: row.pdfUrl,
-    brief_pdf_path: row.briefPdfPath,
     product_status_id: row.productStatusId,
     product_type_id: row.productTypeId,
     category_id: row.categoryId,
@@ -68,8 +64,6 @@ function mergeFieldValues(base: Record<string, unknown>, fieldValues: Record<str
 const BASE_PRODUCT_KEYS = new Set([
   "id",
   "processed_file_id",
-  "pdf_url",
-  "brief_pdf_path",
   "product_status_id",
   "product_type_id",
   "category_id",
@@ -79,8 +73,6 @@ const BASE_PRODUCT_KEYS = new Set([
 
 type BaseProductInput = {
   processedFileId?: number | null;
-  pdfUrl?: string | null;
-  briefPdfPath?: string | null;
   productStatusId?: string | null;
   productTypeId?: string | null;
   categoryId?: string | null;
@@ -94,8 +86,6 @@ function extractBaseAndFieldValues(data: Record<string, unknown>): {
   const fieldValues: Record<string, unknown> = {};
   const snakeToCamel: Record<string, string> = {
     processed_file_id: "processedFileId",
-    pdf_url: "pdfUrl",
-    brief_pdf_path: "briefPdfPath",
     product_status_id: "productStatusId",
     product_type_id: "productTypeId",
     category_id: "categoryId",
@@ -314,8 +304,6 @@ export async function createProduct(data: CreateProductInput): Promise<Product> 
   const row = await prisma.product.create({
     data: {
       processedFileId: base.processedFileId ?? undefined,
-      pdfUrl: base.pdfUrl ?? undefined,
-      briefPdfPath: base.briefPdfPath ?? undefined,
       productStatusId: base.productStatusId ?? undefined,
       productTypeId: base.productTypeId ?? undefined,
       categoryId: base.categoryId ?? undefined,
@@ -340,8 +328,6 @@ export async function updateProduct(
   const { base, fieldValues } = extractBaseAndFieldValues(data as Record<string, unknown>);
   const updateData: Prisma.ProductUncheckedUpdateInput = {};
   if (base.processedFileId !== undefined) updateData.processedFileId = base.processedFileId;
-  if (base.pdfUrl !== undefined) updateData.pdfUrl = base.pdfUrl;
-  if (base.briefPdfPath !== undefined) updateData.briefPdfPath = base.briefPdfPath;
   if (base.productStatusId !== undefined) updateData.productStatusId = base.productStatusId;
   if (base.productTypeId !== undefined) updateData.productTypeId = base.productTypeId;
   if (base.categoryId !== undefined) updateData.categoryId = base.categoryId;

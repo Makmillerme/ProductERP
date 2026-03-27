@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/locale-provider";
 import {
@@ -31,10 +32,12 @@ export function FieldGridEditor({
   disabled,
   cols = 3,
 }: FieldGridEditorProps) {
-  const { t } = useLocale();
+  const { t, tFormat } = useLocale();
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; label: string } | null>(null);
   const items = useMemo(() => computeGridLayout(fields, cols), [fields, cols]);
 
   return (
+    <>
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
       {items.map((item) => {
         if (item.type === "empty") {
@@ -79,7 +82,12 @@ export function FieldGridEditor({
             {onRemoveField && (
               <button
                 type="button"
-                onClick={() => onRemoveField(item.field.fieldDefinitionId)}
+                onClick={() =>
+                  setRemoveTarget({
+                    id: item.field.fieldDefinitionId,
+                    label: item.field.label,
+                  })
+                }
                 disabled={disabled}
                 className={cn(
                   "shrink-0 rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity",
@@ -96,5 +104,26 @@ export function FieldGridEditor({
         );
       })}
     </div>
+    <ConfirmDestructiveDialog
+      open={removeTarget != null}
+      onOpenChange={(open) => {
+        if (!open) setRemoveTarget(null);
+      }}
+      title={t("productsConfig.tabsConfig.confirmRemoveFieldTitle")}
+      description={
+        removeTarget
+          ? tFormat("productsConfig.tabsConfig.confirmRemoveFieldDescription", {
+              label: removeTarget.label,
+            })
+          : undefined
+      }
+      cancelLabel={t("productsConfig.common.cancel")}
+      confirmLabel={t("users.delete")}
+      onConfirm={() => {
+        if (removeTarget && onRemoveField) onRemoveField(removeTarget.id);
+        setRemoveTarget(null);
+      }}
+    />
+    </>
   );
 }

@@ -10,8 +10,16 @@ import {
   DialogTitle,
   DialogBody,
 } from "@/components/ui/dialog";
-import { useListConfig } from "@/features/products/hooks/use-list-config";
-import { useProductConfig } from "@/features/products/hooks/use-product-config";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
+import {
+  useListConfig,
+  listConfigQueryKeys,
+} from "@/features/products/hooks/use-list-config";
+import {
+  useProductConfig,
+  productConfigQueryKeys,
+  type ProductConfigTab,
+} from "@/features/products/hooks/use-product-config";
 import { ProductDetailSheet } from "@/features/products/components/product-detail-sheet";
 import {
   AddFieldDialog,
@@ -20,7 +28,9 @@ import {
 import { isFieldAvailableForCategory } from "@/features/products/lib/field-utils";
 import { FULL_ROW_WIDGETS } from "@/features/products/lib/grid-layout";
 import { toast } from "sonner";
-import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
+import { MANAGEMENT_STALE_MS, managementAdminKeys, managementTabKeys } from "@/lib/query-keys";
+import { fetchAdminProductTypes } from "@/lib/api/admin/catalog";
+import { adminFetch, adminGetJson, adminMutationJson } from "@/lib/api/admin/client";
 
 type ProductTypeItem = { id: string; name: string; categoryId: string | null };
 type FieldDefinitionItem = {
@@ -39,17 +49,11 @@ type FieldDefinitionItem = {
 };
 
 async function fetchProductTypes(t: (key: string) => string): Promise<ProductTypeItem[]> {
-  const res = await fetch("/api/admin/product-types");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadTypesFailed"));
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data : (data?.productTypes ?? data?.vehicleTypes ?? []);
+  return fetchAdminProductTypes(t) as Promise<ProductTypeItem[]>;
 }
 
 async function fetchFieldDefinitions(): Promise<FieldDefinitionItem[]> {
-  const res = await fetch("/api/admin/field-definitions?pageSize=500");
+  const res = await adminFetch("/field-definitions?pageSize=500");
   if (!res.ok) return [];
   const data = await res.json();
   return data.fieldDefinitions ?? [];
@@ -57,13 +61,22 @@ async function fetchFieldDefinitions(): Promise<FieldDefinitionItem[]> {
 
 const COLS_PER_ROW = 3;
 
-async function fetchTabDetail(tabId: string, t: (key: string) => string) {
-  const res = await fetch(`/api/admin/tabs/${tabId}`);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.tabsConfig.loadTabFailed"));
-  }
-  return res.json();
+type PreviewTabDetail = {
+  fields?: {
+    fieldDefinitionId: string;
+    productTypeId: string | null;
+    order: number;
+    colSpan: number;
+    isRequired: boolean;
+    sectionTitle: string | null;
+  }[];
+};
+
+async function fetchTabDetail(tabId: string, t: (key: string) => string): Promise<PreviewTabDetail> {
+  return adminGetJson<PreviewTabDetail>(
+    `/tabs/${tabId}`,
+    t("productsConfig.tabsConfig.loadTabFailed")
+  );
 }
 
 type ProductCardPreviewModalProps = {
@@ -79,9 +92,14 @@ export function ProductCardPreviewModal({
   categoryId,
   viewMethod,
 }: ProductCardPreviewModalProps) {
-  const { t } = useLocale();
+  const { t, tFormat } = useLocale();
   const queryClient = useQueryClient();
   const [previewProductTypeId, setPreviewProductTypeId] = useState<string>("");
+  const [removeFieldPending, setRemoveFieldPending] = useState<{
+    tabId: string;
+    fieldDefinitionId: string;
+    label: string;
+  } | null>(null);
   const [addFieldDialogOpen, setAddFieldDialogOpen] = useState(false);
   const [activeTabIdForAdd, setActiveTabIdForAdd] = useState<string | null>(null);
   const [addFieldTarget, setAddFieldTarget] = useState<{ row: number; col: number } | null>(null);
@@ -96,13 +114,14 @@ export function ProductCardPreviewModal({
   }, [open, shouldRender]);
 
   const { listConfig } = useListConfig(categoryId);
-  const productTypeId = listConfig?.productType?.id ?? null;
-  const { data: productConfig } = useProductConfig(
-    open && productTypeId ? productTypeId : null
-  );
+  /** Той самий резолв, що в ProductDetailSheet (прев'ю типу або перший тип категорії). */
+  const resolvedProductTypeIdForConfig =
+    previewProductTypeId || listConfig?.productType?.id || null;
+  const previewConfigProductTypeId = open ? resolvedProductTypeIdForConfig : null;
+  const { data: productConfig } = useProductConfig(previewConfigProductTypeId);
 
   const { data: productTypes = [] } = useQuery({
-    queryKey: ["admin", "product-types"],
+    queryKey: managementAdminKeys.productTypes,
     queryFn: () => fetchProductTypes(t),
     enabled: open && !!categoryId,
   });
@@ -110,7 +129,7 @@ export function ProductCardPreviewModal({
   const typesForCategory = productTypes.filter((pt) => pt.categoryId === categoryId);
 
   const { data: allFields = [], isLoading: allFieldsLoading } = useQuery({
-    queryKey: ["admin", "field-definitions"],
+    queryKey: managementAdminKeys.fieldDefinitions,
     queryFn: fetchFieldDefinitions,
     staleTime: MANAGEMENT_STALE_MS,
     enabled: addFieldDialogOpen,
@@ -131,15 +150,25 @@ export function ProductCardPreviewModal({
     const unassigned = allFields.filter((f) => !assignedFieldIds.has(f.id));
     const isGlobal = (f: FieldDefinitionItem) =>
       !(f.categoryIds?.length) && !(f.productTypeIds?.length);
-    const productTypeIdFilter = previewProductTypeId || null;
     const available = (f: FieldDefinitionItem) =>
-      isFieldAvailableForCategory(f, categoryId, productTypeIdFilter, productTypes);
+      isFieldAvailableForCategory(
+        f,
+        categoryId,
+        resolvedProductTypeIdForConfig,
+        productTypes
+      );
     return {
       currentCat: unassigned.filter((f) => !isGlobal(f) && available(f)),
       global: unassigned.filter(isGlobal),
       otherCats: [],
     };
-  }, [allFields, assignedFieldIds, categoryId, productTypes, previewProductTypeId]);
+  }, [
+    allFields,
+    assignedFieldIds,
+    categoryId,
+    productTypes,
+    resolvedProductTypeIdForConfig,
+  ]);
 
   const addFieldMut = useMutation({
     mutationFn: async ({
@@ -161,6 +190,7 @@ export function ProductCardPreviewModal({
         colSpan: number;
         isRequired: boolean;
         sectionTitle: string | null;
+        stretchInRow?: boolean;
       }[];
       if (existingFields.some((f) => f.fieldDefinitionId === field.id)) {
         return tabData;
@@ -184,6 +214,7 @@ export function ProductCardPreviewModal({
           colSpan: f.colSpan,
           isRequired: f.isRequired,
           sectionTitle: f.sectionTitle,
+          stretchInRow: f.stretchInRow ?? false,
         })),
         {
           fieldDefinitionId: field.id,
@@ -192,27 +223,22 @@ export function ProductCardPreviewModal({
           colSpan: isFullRow ? 3 : 1,
           isRequired: false,
           sectionTitle: null,
+          stretchInRow: false,
         },
       ];
-      const res = await fetch(`/api/admin/tabs/${tabId}`, {
+      return adminMutationJson(`/tabs/${tabId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields: newFields }),
+        body: { fields: newFields },
+        fallbackError: t("productsConfig.tabsConfig.addFieldToTabFailed"),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error ?? t("productsConfig.tabsConfig.addFieldToTabFailed"));
-      }
-      return res.json();
     },
     onMutate: async ({ tabId, field, targetRow, targetCol }) => {
-      const ptId = listConfig?.productType?.id;
+      const ptId = resolvedProductTypeIdForConfig;
       if (!ptId) return;
-      await queryClient.cancelQueries({ queryKey: ["product-config", ptId] });
-      const prev = queryClient.getQueryData<{ tabs: { id: string; fields: { order: number }[] }[] }>([
-        "product-config",
-        ptId,
-      ]);
+      await queryClient.cancelQueries({ queryKey: productConfigQueryKeys.type(ptId) });
+      const prev = queryClient.getQueryData<{ tabs: { id: string; fields: { order: number }[] }[] }>(
+        productConfigQueryKeys.type(ptId)
+      );
       if (!prev?.tabs) return;
       const tab = prev.tabs.find((t) => t.id === tabId);
       const existingOrders = (tab?.fields ?? []).map((f) => f.order);
@@ -234,6 +260,7 @@ export function ProductCardPreviewModal({
         colSpan: isFullRow ? 3 : 1,
         isRequired: false,
         sectionTitle: null,
+        stretchInRow: false,
         targetRow: targetRow ?? undefined,
         targetCol: targetCol ?? undefined,
         fieldDefinition: {
@@ -251,7 +278,7 @@ export function ProductCardPreviewModal({
           placeholder: fullDef?.placeholder ?? null,
         },
       };
-      queryClient.setQueryData(["product-config", ptId], {
+      queryClient.setQueryData(productConfigQueryKeys.type(ptId), {
         ...prev,
         tabs: prev.tabs.map((tab) =>
           tab.id === tabId
@@ -263,15 +290,19 @@ export function ProductCardPreviewModal({
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.ptId && ctx?.prev) {
-        queryClient.setQueryData(["product-config", ctx.ptId], ctx.prev);
+        queryClient.setQueryData(productConfigQueryKeys.type(ctx.ptId), ctx.prev);
       }
     },
-    onSettled: () => {
-      const ptId = listConfig?.productType?.id;
-      if (ptId) queryClient.invalidateQueries({ queryKey: ["product-config", ptId] });
-      if (categoryId) queryClient.invalidateQueries({ queryKey: ["list-config", categoryId] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "tab-detail"] });
-      if (categoryId) queryClient.invalidateQueries({ queryKey: ["admin", "category-tabs", categoryId] });
+    onSettled: (_d, _e, vars) => {
+      const ptId = resolvedProductTypeIdForConfig;
+      if (ptId) queryClient.invalidateQueries({ queryKey: productConfigQueryKeys.type(ptId) });
+      if (categoryId) queryClient.invalidateQueries({
+            queryKey: listConfigQueryKeys.category(categoryId),
+          });
+      queryClient.invalidateQueries({
+        queryKey: managementTabKeys.tabDetail(vars.tabId),
+      });
+      if (categoryId) queryClient.invalidateQueries({ queryKey: managementTabKeys.categoryTabs(categoryId) });
     },
   });
 
@@ -291,6 +322,7 @@ export function ProductCardPreviewModal({
         colSpan: number;
         isRequired: boolean;
         sectionTitle: string | null;
+        stretchInRow?: boolean;
       }[];
       const newFields = existingFields
         .filter((f) => f.fieldDefinitionId !== fieldDefinitionId)
@@ -301,27 +333,23 @@ export function ProductCardPreviewModal({
           colSpan: f.colSpan,
           isRequired: f.isRequired,
           sectionTitle: f.sectionTitle,
+          stretchInRow: f.stretchInRow ?? false,
         }));
-      const res = await fetch(`/api/admin/tabs/${tabId}`, {
+      return adminMutationJson(`/tabs/${tabId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields: newFields }),
+        body: { fields: newFields },
+        fallbackError: t("productsConfig.tabsConfig.removeFieldFromTabFailed"),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error ?? t("productsConfig.tabsConfig.removeFieldFromTabFailed"));
-      }
-      return res.json();
     },
     onMutate: async ({ tabId, fieldDefinitionId }) => {
-      const ptId = listConfig?.productType?.id;
+      const ptId = resolvedProductTypeIdForConfig;
       if (!ptId) return;
-      await queryClient.cancelQueries({ queryKey: ["product-config", ptId] });
+      await queryClient.cancelQueries({ queryKey: productConfigQueryKeys.type(ptId) });
       const prev = queryClient.getQueryData<{
         tabs: { id: string; fields: { fieldDefinitionId?: string }[] }[];
-      }>(["product-config", ptId]);
+      }>(productConfigQueryKeys.type(ptId));
       if (!prev?.tabs) return { prev: undefined, ptId: undefined };
-      queryClient.setQueryData(["product-config", ptId], {
+      queryClient.setQueryData(productConfigQueryKeys.type(ptId), {
         ...prev,
         tabs: prev.tabs.map((tab) =>
           tab.id === tabId
@@ -338,15 +366,19 @@ export function ProductCardPreviewModal({
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.ptId && ctx?.prev) {
-        queryClient.setQueryData(["product-config", ctx.ptId], ctx.prev);
+        queryClient.setQueryData(productConfigQueryKeys.type(ctx.ptId), ctx.prev);
       }
     },
-    onSettled: () => {
-      const ptId = listConfig?.productType?.id;
-      if (ptId) queryClient.invalidateQueries({ queryKey: ["product-config", ptId] });
-      if (categoryId) queryClient.invalidateQueries({ queryKey: ["list-config", categoryId] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "tab-detail"] });
-      if (categoryId) queryClient.invalidateQueries({ queryKey: ["admin", "category-tabs", categoryId] });
+    onSettled: (_d, _e, vars) => {
+      const ptId = resolvedProductTypeIdForConfig;
+      if (ptId) queryClient.invalidateQueries({ queryKey: productConfigQueryKeys.type(ptId) });
+      if (categoryId) queryClient.invalidateQueries({
+            queryKey: listConfigQueryKeys.category(categoryId),
+          });
+      queryClient.invalidateQueries({
+        queryKey: managementTabKeys.tabDetail(vars.tabId),
+      });
+      if (categoryId) queryClient.invalidateQueries({ queryKey: managementTabKeys.categoryTabs(categoryId) });
     },
   });
 
@@ -356,20 +388,41 @@ export function ProductCardPreviewModal({
     setAddFieldDialogOpen(true);
   }, []);
 
+  const resolveFieldLabel = useCallback(
+    (tabId: string, fieldDefinitionId: string) => {
+      const tabs = productConfig?.tabs as ProductConfigTab[] | undefined;
+      const tab = tabs?.find((x) => x.id === tabId);
+      const fld = tab?.fields?.find((f) => f.fieldDefinitionId === fieldDefinitionId);
+      return fld?.fieldDefinition?.label ?? fieldDefinitionId;
+    },
+    [productConfig?.tabs]
+  );
+
   const handleRemoveField = useCallback(
     (tabId: string, fieldDefinitionId: string) => {
-      removeFieldMut.mutate(
-        { tabId, fieldDefinitionId },
-        {
-          onError: (err) =>
-            toast.error(
-              err instanceof Error ? err.message : t("errors.deleteFailed")
-            ),
-        }
-      );
+      setRemoveFieldPending({
+        tabId,
+        fieldDefinitionId,
+        label: resolveFieldLabel(tabId, fieldDefinitionId),
+      });
     },
-    [removeFieldMut, t]
+    [resolveFieldLabel]
   );
+
+  const handleConfirmRemoveField = useCallback(() => {
+    if (!removeFieldPending) return;
+    const { tabId, fieldDefinitionId } = removeFieldPending;
+    removeFieldMut.mutate(
+      { tabId, fieldDefinitionId },
+      {
+        onSuccess: () => setRemoveFieldPending(null),
+        onError: (err) =>
+          toast.error(
+            err instanceof Error ? err.message : t("errors.deleteFailed")
+          ),
+      }
+    );
+  }, [removeFieldPending, removeFieldMut, t]);
 
   const handleSelectField = useCallback(
     (field: AddFieldItem) => {
@@ -404,9 +457,6 @@ export function ProductCardPreviewModal({
     );
   }
 
-  const effectiveProductTypeId =
-    previewProductTypeId || listConfig?.productType?.id || null;
-
   if (!shouldRender) return null;
 
   return (
@@ -415,7 +465,7 @@ export function ProductCardPreviewModal({
         product={null}
         open={open}
         onOpenChange={onOpenChange}
-        productTypeId={effectiveProductTypeId}
+        productTypeId={resolvedProductTypeIdForConfig}
         categoryLabel={listConfig?.categoryName}
         previewMode
         previewProductTypes={typesForCategory}
@@ -435,6 +485,24 @@ export function ProductCardPreviewModal({
         loading={allFieldsLoading}
         disabled={addFieldMut.isPending}
         categoryName={listConfig?.categoryName}
+      />
+      <ConfirmDestructiveDialog
+        open={removeFieldPending != null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveFieldPending(null);
+        }}
+        title={t("productsConfig.tabsConfig.confirmRemoveFieldTitle")}
+        description={
+          removeFieldPending
+            ? tFormat("productsConfig.tabsConfig.confirmRemoveFieldDescription", {
+                label: removeFieldPending.label,
+              })
+            : undefined
+        }
+        cancelLabel={t("productsConfig.common.cancel")}
+        confirmLabel={t("users.delete")}
+        confirmPending={removeFieldMut.isPending}
+        onConfirm={handleConfirmRemoveField}
       />
     </>
   );

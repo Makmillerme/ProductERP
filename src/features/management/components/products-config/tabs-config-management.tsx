@@ -2,7 +2,14 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
+import { MANAGEMENT_STALE_MS, managementAdminKeys, managementTabKeys } from "@/lib/query-keys";
+import { fetchAdminCategories, fetchAdminProductTypes } from "@/lib/api/admin/catalog";
+import {
+  adminGetJson,
+  adminMutationJson,
+  adminDeleteAllowMissing,
+} from "@/lib/api/admin/client";
+import { invalidateCategoryDisplayCaches } from "@/lib/invalidate-display-caches";
 import {
   Sheet,
   SheetContent,
@@ -15,16 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDestructiveDialog } from "@/components/confirm-destructive-dialog";
 import {
   Dialog,
   DialogContent,
@@ -32,34 +31,30 @@ import {
   DialogTitle,
   DialogBody,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
   TableCell,
+  TableCellText,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TableWithPagination } from "@/components/table-with-pagination";
+import { MgmtTableColGroup } from "@/components/mgmt-table-colgroup";
 import {
-  Plus,
-  Loader2,
-  X,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronDown,
-} from "lucide-react";
+  MGMT_COLGROUP_4_TABS,
+  mgmtTableLayoutClass,
+  mgmtTableHeaderRowClass,
+  mgmtTableHeadClass,
+  mgmtTableCellPrimaryClass,
+  mgmtTableCellMutedSmClass,
+  mgmtTableCellNumericClass,
+} from "@/config/management-table";
+import { TableWithPagination } from "@/components/table-with-pagination";
+import { TablePaginationBar } from "@/components/table-pagination-bar";
+import { ManagementListLoading, TableEmptyMessageRow } from "@/components/management-list-states";
+import { Plus, Loader2, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SYSTEM_TAB_CONFIG } from "@/config/system-tab";
 import { toast } from "sonner";
@@ -73,8 +68,6 @@ import type {
   TabFieldItem,
   FieldDefinitionItem,
 } from "./types";
-
-const CATEGORIES_KEY = ["admin", "categories"] as const;
 
 const COLS_PER_ROW = 3;
 
@@ -90,61 +83,35 @@ function rowSectionToOrder(row: number, section: number): number {
   return (row - 1) * COLS_PER_ROW + Math.min(3, Math.max(1, section)) - 1;
 }
 
-const FIELD_DEFS_KEY = ["admin", "field-definitions"] as const;
-
 const PAGE_SIZES = [10, 20, 50] as const;
 const DEFAULT_PAGE_SIZE = 20;
 
 type TFn = (key: string) => string;
 
 async function fetchCategories(t: TFn): Promise<CategoryItem[]> {
-  const res = await fetch("/api/admin/categories");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadCategoriesFailed"));
-  }
-  const data = await res.json();
-  return data.categories ?? data ?? [];
+  return fetchAdminCategories(t) as Promise<CategoryItem[]>;
 }
 
 async function fetchProductTypes(t: TFn): Promise<ProductTypeItem[]> {
-  const res = await fetch("/api/admin/product-types");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadTypesFailed"));
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data : (data?.productTypes ?? data?.vehicleTypes ?? data ?? []);
+  return fetchAdminProductTypes(t) as Promise<ProductTypeItem[]>;
 }
 
 async function fetchTabsForCategory(categoryId: string, t: TFn): Promise<TabDefinitionItem[]> {
-  const res = await fetch(`/api/admin/categories/${categoryId}/tabs`);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.tabsConfig.loadTabsFailed"));
-  }
-  return res.json();
+  return adminGetJson(`/categories/${categoryId}/tabs`, t("productsConfig.tabsConfig.loadTabsFailed"));
 }
 
 async function fetchTabDetail(
   tabId: string,
   t: TFn
 ): Promise<TabDefinitionItem & { fields: TabFieldItem[] }> {
-  const res = await fetch(`/api/admin/tabs/${tabId}`);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.tabsConfig.loadTabFailed"));
-  }
-  return res.json();
+  return adminGetJson(`/tabs/${tabId}`, t("productsConfig.tabsConfig.loadTabFailed"));
 }
 
 async function fetchFieldDefinitions(t: TFn): Promise<FieldDefinitionItem[]> {
-  const res = await fetch("/api/admin/field-definitions?pageSize=500");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.tabsConfig.loadFieldsFailed"));
-  }
-  const data = await res.json();
+  const data = await adminGetJson<{ fieldDefinitions?: FieldDefinitionItem[] }>(
+    "/field-definitions?pageSize=500",
+    t("productsConfig.tabsConfig.loadFieldsFailed")
+  );
   return data.fieldDefinitions ?? [];
 }
 
@@ -156,15 +123,12 @@ async function createTabApi(
     order?: number;
   },
   t: TFn
-) {
-  const res = await fetch(`/api/admin/categories/${categoryId}/tabs`, {
+): Promise<TabDefinitionItem> {
+  return adminMutationJson<TabDefinitionItem>(`/categories/${categoryId}/tabs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.tabsConfig.createTabFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.tabsConfig.createTabFailed"));
-  return data;
 }
 
 interface TabFieldInput {
@@ -174,6 +138,7 @@ interface TabFieldInput {
   colSpan?: number;
   isRequired?: boolean;
   sectionTitle?: string | null;
+  stretchInRow?: boolean;
 }
 
 async function updateTabApi(
@@ -186,22 +151,18 @@ async function updateTabApi(
   },
   t: TFn
 ) {
-  const res = await fetch(`/api/admin/tabs/${tabId}`, {
+  return adminMutationJson(`/tabs/${tabId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.tabsConfig.saveTabFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.tabsConfig.saveTabFailed"));
-  return data;
 }
 
 async function deleteTabApi(tabId: string, t: TFn) {
-  const res = await fetch(`/api/admin/tabs/${tabId}`, { method: "DELETE" });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.tabsConfig.deleteTabFailed"));
-  }
+  await adminDeleteAllowMissing(
+    `/tabs/${tabId}`,
+    t("productsConfig.tabsConfig.deleteTabFailed"),
+  );
 }
 
 type AssignedField = {
@@ -211,6 +172,7 @@ type AssignedField = {
   colSpan: number;
   isRequired: boolean;
   sectionTitle: string;
+  stretchInRow: boolean;
   fieldDefinition: FieldDefinitionItem;
 };
 
@@ -242,19 +204,36 @@ export function TabsConfigManagement({
   const [deleteTabDialogOpen, setDeleteTabDialogOpen] = useState(false);
 
   const { data: categories = [] } = useQuery({
-    queryKey: [...CATEGORIES_KEY],
+    queryKey: [...managementAdminKeys.categories],
     queryFn: () => fetchCategories(t),
     staleTime: MANAGEMENT_STALE_MS,
   });
 
   const { data: productTypes = [] } = useQuery({
-    queryKey: ["admin", "product-types"],
+    queryKey: managementAdminKeys.productTypes,
     queryFn: () => fetchProductTypes(t),
     staleTime: MANAGEMENT_STALE_MS,
     enabled: !!selectedCategoryId,
   });
 
-  const tabsQueryKey = ["admin", "category-tabs", selectedCategoryId];
+  const productTypeIdsInCategory = useMemo(
+    () =>
+      productTypes
+        .filter((pt) => pt.categoryId === selectedCategoryId)
+        .map((pt) => pt.id),
+    [productTypes, selectedCategoryId],
+  );
+
+  const bustDisplayCaches = useCallback(() => {
+    if (!selectedCategoryId) return;
+    invalidateCategoryDisplayCaches(
+      queryClient,
+      selectedCategoryId,
+      productTypeIdsInCategory,
+    );
+  }, [queryClient, selectedCategoryId, productTypeIdsInCategory]);
+
+  const tabsQueryKey = managementTabKeys.categoryTabs(selectedCategoryId);
   const { data: tabs = [], isLoading: tabsLoading } = useQuery({
     queryKey: tabsQueryKey,
     queryFn: () => fetchTabsForCategory(selectedCategoryId, t),
@@ -263,23 +242,25 @@ export function TabsConfigManagement({
   });
 
   const { data: tabDetail, isLoading: tabDetailLoading } = useQuery({
-    queryKey: ["admin", "tab-detail", editingTabId],
+    queryKey: [...managementTabKeys.allTabDetails, editingTabId] as const,
     queryFn: () => fetchTabDetail(editingTabId!, t),
     enabled: !!editingTabId && !isCreate,
     staleTime: MANAGEMENT_STALE_MS,
   });
 
   const { data: allFields = [], isLoading: allFieldsLoading } = useQuery({
-    queryKey: [...FIELD_DEFS_KEY],
+    queryKey: [...managementAdminKeys.fieldDefinitions],
     queryFn: () => fetchFieldDefinitions(t),
     staleTime: MANAGEMENT_STALE_MS,
     enabled: addFieldDialogOpen,
   });
 
   useEffect(() => {
-    if (!tabDetail?.fields) return;
-    const seen = new Map<string, (typeof tabDetail.fields)[number]>();
-    for (const f of tabDetail.fields) {
+    if (!editingTabId || isCreate) return;
+    if (!tabDetail || tabDetail.id !== editingTabId) return;
+    const rawFields = tabDetail.fields ?? [];
+    const seen = new Map<string, (typeof rawFields)[number]>();
+    for (const f of rawFields) {
       const prev = seen.get(f.fieldDefinitionId);
       if (!prev || (f.productTypeId && !prev.productTypeId)) {
         seen.set(f.fieldDefinitionId, f);
@@ -293,10 +274,11 @@ export function TabsConfigManagement({
         colSpan: f.colSpan,
         isRequired: f.isRequired,
         sectionTitle: f.sectionTitle ?? "",
+        stretchInRow: f.stretchInRow ?? false,
         fieldDefinition: f.fieldDefinition,
       }))
     );
-  }, [tabDetail]);
+  }, [tabDetail, editingTabId, isCreate]);
 
   const assignedInCard = useMemo(() => {
     const ids = new Set<string>();
@@ -339,6 +321,14 @@ export function TabsConfigManagement({
     () => [...tabs].sort((a, b) => a.order - b.order),
     [tabs]
   );
+
+  /** Не зберігати таб, поки не підтягнуто деталі — інакше PATCH з порожнім fields зітре TabField у БД. */
+  const tabEditDetailReady =
+    isCreate ||
+    (!!editingTabId &&
+      !!tabDetail &&
+      tabDetail.id === editingTabId &&
+      !tabDetailLoading);
 
   const [searchInput, setSearchInput] = useState("");
   const search = searchInput.trim().toLowerCase();
@@ -409,18 +399,51 @@ export function TabsConfigManagement({
     [totalPages]
   );
 
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   const createMut = useMutation({
-    mutationFn: (body: Parameters<typeof createTabApi>[1]) =>
-      createTabApi(selectedCategoryId, body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: tabsQueryKey });
-      if (selectedCategoryId) {
-        queryClient.invalidateQueries({ queryKey: ["product-config"] });
-        queryClient.invalidateQueries({ queryKey: ["list-config", selectedCategoryId] });
+    mutationFn: (body: Parameters<typeof createTabApi>[1]) => {
+      if (!selectedCategoryId) throw new Error("category");
+      return createTabApi(selectedCategoryId, body, t);
+    },
+    onMutate: async (body) => {
+      if (!selectedCategoryId) return {};
+      await queryClient.cancelQueries({ queryKey: tabsQueryKey });
+      const previous = queryClient.getQueryData<TabDefinitionItem[]>(tabsQueryKey);
+      const tempId = `optimistic-${Date.now()}`;
+      const now = new Date().toISOString();
+      const optimistic: TabDefinitionItem = {
+        id: tempId,
+        categoryId: selectedCategoryId,
+        name: body.name,
+        icon: body.icon?.trim() ? body.icon.trim() : null,
+        tabConfig: null,
+        order: body.order ?? 0,
+        isSystem: false,
+        createdAt: now,
+        updatedAt: now,
+        _count: { fields: 0 },
+      };
+      queryClient.setQueryData<TabDefinitionItem[]>(tabsQueryKey, (old = []) =>
+        [...old, optimistic].sort((a, b) => a.order - b.order),
+      );
+      return { previous, tempId };
+    },
+    onError: (_err, _body, ctx) => {
+      if (ctx?.previous !== undefined) {
+        queryClient.setQueryData(tabsQueryKey, ctx.previous);
       }
+    },
+    onSuccess: (data, _body, ctx) => {
+      const merged: TabDefinitionItem = {
+        ...data,
+        updatedAt: data.updatedAt ?? data.createdAt,
+        _count: data._count ?? { fields: 0 },
+      };
+      queryClient.setQueryData<TabDefinitionItem[]>(tabsQueryKey, (old = []) =>
+        old
+          .map((tab) => (tab.id === ctx?.tempId ? merged : tab))
+          .sort((a, b) => a.order - b.order),
+      );
+      bustDisplayCaches();
       toast.success(t("toasts.tabCreated"));
     },
   });
@@ -433,27 +456,62 @@ export function TabsConfigManagement({
       id: string;
       body: Parameters<typeof updateTabApi>[1];
     }) => updateTabApi(id, body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: tabsQueryKey });
-      queryClient.invalidateQueries({
-        queryKey: ["admin", "tab-detail", editingTabId],
-      });
-      if (selectedCategoryId) {
-        queryClient.invalidateQueries({ queryKey: ["product-config"] });
-        queryClient.invalidateQueries({ queryKey: ["list-config", selectedCategoryId] });
+    onMutate: async ({ id, body }) => {
+      await queryClient.cancelQueries({ queryKey: tabsQueryKey });
+      const previous = queryClient.getQueryData<TabDefinitionItem[]>(tabsQueryKey);
+      queryClient.setQueryData<TabDefinitionItem[]>(tabsQueryKey, (old = []) =>
+        old
+          .map((tab) =>
+            tab.id === id
+              ? {
+                  ...tab,
+                  ...(body.name !== undefined ? { name: body.name } : {}),
+                  ...(body.icon !== undefined
+                    ? { icon: body.icon ?? null }
+                    : {}),
+                  ...(body.order !== undefined ? { order: body.order } : {}),
+                }
+              : tab,
+          )
+          .sort((a, b) => a.order - b.order),
+      );
+      return { previous };
+    },
+    onError: (_err, _v, ctx) => {
+      if (ctx?.previous !== undefined) {
+        queryClient.setQueryData(tabsQueryKey, ctx.previous);
       }
+    },
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: managementTabKeys.tabDetail(id) });
+      bustDisplayCaches();
       toast.success(t("toasts.tabSaved"));
     },
   });
 
   const deleteMut = useMutation({
     mutationFn: (tabId: string) => deleteTabApi(tabId, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: tabsQueryKey });
-      if (selectedCategoryId) {
-        queryClient.invalidateQueries({ queryKey: ["product-config"] });
-        queryClient.invalidateQueries({ queryKey: ["list-config", selectedCategoryId] });
+    onMutate: async (tabId) => {
+      await queryClient.cancelQueries({ queryKey: tabsQueryKey });
+      const previous = queryClient.getQueryData<TabDefinitionItem[]>(tabsQueryKey);
+      queryClient.setQueryData<TabDefinitionItem[]>(tabsQueryKey, (old = []) =>
+        old.filter((tab) => tab.id !== tabId),
+      );
+      queryClient.removeQueries({ queryKey: managementTabKeys.tabDetail(tabId) });
+      if (editingTabId === tabId) {
+        setSheetOpen(false);
+        setEditingTabId(null);
+        setIsCreate(false);
       }
+      return { previous };
+    },
+    onError: (_err, _tabId, ctx) => {
+      if (ctx?.previous !== undefined) {
+        queryClient.setQueryData(tabsQueryKey, ctx.previous);
+      }
+    },
+    onSuccess: () => {
+      bustDisplayCaches();
       toast.success(t("toasts.tabDeleted"));
     },
   });
@@ -501,6 +559,10 @@ export function TabsConfigManagement({
       toast.error(t("validationRequired.tabName"));
       return;
     }
+    if (!isCreate && !tabEditDetailReady) {
+      toast.error(t("productsConfig.tabsConfig.tabDetailNotReady"));
+      return;
+    }
     setSaving(true);
     try {
       if (isCreate) {
@@ -516,11 +578,15 @@ export function TabsConfigManagement({
           order: tabOrder,
           fields: assignedFields.map((f) => ({
             fieldDefinitionId: f.fieldDefinitionId,
-            productTypeId: null,
+            productTypeId: f.productTypeId ?? null,
             order: f.order,
-            colSpan: 1,
-            isRequired: false,
-            sectionTitle: null,
+            colSpan: f.colSpan,
+            isRequired: f.isRequired,
+            sectionTitle: f.sectionTitle?.trim() ? f.sectionTitle.trim() : null,
+            stretchInRow:
+              f.stretchInRow &&
+              !FULL_ROW_WIDGETS.has(f.fieldDefinition.widgetType) &&
+              f.colSpan < 3,
           })),
         };
         await updateMut.mutateAsync({ id: editingTabId, body });
@@ -567,6 +633,7 @@ export function TabsConfigManagement({
           colSpan: isFullRow ? 3 : 1,
           isRequired: false,
           sectionTitle: "",
+          stretchInRow: false,
           fieldDefinition: field,
         },
       ];
@@ -576,6 +643,14 @@ export function TabsConfigManagement({
   const removeField = (fieldDefId: string) => {
     setAssignedFields((prev) =>
       prev.filter((f) => f.fieldDefinitionId !== fieldDefId)
+    );
+  };
+
+  const setFieldStretchInRow = (fieldDefId: string, v: boolean) => {
+    setAssignedFields((prev) =>
+      prev.map((f) =>
+        f.fieldDefinitionId === fieldDefId ? { ...f, stretchInRow: v } : f
+      )
     );
   };
 
@@ -610,9 +685,7 @@ export function TabsConfigManagement({
           {t("productsConfig.emptyStates.selectCategory")}
         </p>
       ) : tabsLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <ManagementListLoading />
       ) : (
         <>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
@@ -642,128 +715,48 @@ export function TabsConfigManagement({
           </div>
           <TableWithPagination
             pagination={
-              <>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                    aria-label={t("common.pagination.ariaFirstPage")}
-                    disabled={!canPrev}
-                    onClick={() => goToPage(1)}
-                  >
-                    <ChevronsLeft className="size-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                    aria-label={t("common.pagination.ariaPrevPage")}
-                    disabled={!canPrev}
-                    onClick={() => goToPage(page - 1)}
-                  >
-                    <ChevronLeft className="size-4" />
-                  </Button>
-                  <span className="flex items-center gap-1.5 px-2 text-sm text-muted-foreground">
-                    {t("common.pagination.page")}
-                    <Input
-                      type="number"
-                      min={1}
-                      max={totalPages}
-                      value={pageInputValue}
-                      onChange={(e) => setPageInputValue(e.target.value)}
-                      onBlur={handlePageInputBlur}
-                      onKeyDown={handlePageInputKeyDown}
-                      className="h-8 w-14 text-center"
-                      aria-label={t("common.pagination.ariaPageNumber")}
-                    />
-                    {t("common.pagination.pageOf")} {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                    aria-label={t("common.pagination.ariaNextPage")}
-                    disabled={!canNext}
-                    onClick={() => goToPage(page + 1)}
-                  >
-                    <ChevronRight className="size-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="flex items-center justify-center [&_svg]:block [&_svg]:m-auto"
-                    aria-label={t("common.pagination.ariaLastPage")}
-                    disabled={!canNext}
-                    onClick={() => goToPage(totalPages)}
-                  >
-                    <ChevronsRight className="size-4" />
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>{t("common.pagination.rowsPerPage")}</span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="default"
-                        className="gap-2 min-w-[4.5rem] justify-between"
-                        aria-label={t("common.pagination.ariaRowsPerPage")}
-                      >
-                        {pageSize}
-                        <ChevronDown className="size-4 opacity-50" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuRadioGroup
-                        value={String(pageSize)}
-                        onValueChange={(v) => {
-                          setPageSize(Number(v));
-                          setPage(1);
-                        }}
-                      >
-                        {PAGE_SIZES.map((n) => (
-                          <DropdownMenuRadioItem key={n} value={String(n)}>
-                            {n}
-                          </DropdownMenuRadioItem>
-                        ))}
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </>
+              <TablePaginationBar
+                page={page}
+                totalPages={totalPages}
+                pageInputValue={pageInputValue}
+                onPageInputChange={setPageInputValue}
+                onPageInputBlur={handlePageInputBlur}
+                onPageInputKeyDown={handlePageInputKeyDown}
+                goToPage={goToPage}
+                pageSize={pageSize}
+                pageSizes={PAGE_SIZES}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+              />
             }
           >
-            <Table className="w-full table-fixed">
+            <Table className={mgmtTableLayoutClass}>
+              <MgmtTableColGroup widths={MGMT_COLGROUP_4_TABS} />
               <TableHeader>
-                <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead className="h-11 px-3 text-left align-middle w-14">
+                <TableRow className={mgmtTableHeaderRowClass}>
+                  <TableHead className={mgmtTableHeadClass}>
                     {t("productsConfig.tabsConfig.tableOrder")}
                   </TableHead>
-                  <TableHead className="h-11 px-3 text-left align-middle">
+                  <TableHead className={mgmtTableHeadClass}>
                     {t("productsConfig.tabsConfig.tableName")}
                   </TableHead>
-                  <TableHead className="h-11 px-3 text-left align-middle w-28 hidden sm:table-cell">
+                  <TableHead className={`${mgmtTableHeadClass} hidden sm:table-cell`}>
                     {t("productsConfig.tabsConfig.tableIcon")}
                   </TableHead>
-                  <TableHead className="h-11 px-3 text-left align-middle w-24">
+                  <TableHead className={mgmtTableHeadClass}>
                     {t("productsConfig.tabsConfig.tableFieldsCount")}
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedTabs.length === 0 ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell plain colSpan={4} className="h-24 align-middle">
-                      <div className="flex min-h-[8rem] w-full flex-col items-center justify-center gap-2 py-10 text-center">
-                        <p className="text-sm text-muted-foreground px-4">
-                          {sortedTabs.length === 0
-                            ? t("productsConfig.emptyStates.noTabs")
-                            : t("common.emptySearch")}
-                        </p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <TableEmptyMessageRow colSpan={4}>
+                    {sortedTabs.length === 0
+                      ? t("productsConfig.emptyStates.noTabs")
+                      : t("common.emptySearch")}
+                  </TableEmptyMessageRow>
                 ) : (
                   paginatedTabs.map((tab) => (
                     <TableRow
@@ -771,17 +764,22 @@ export function TabsConfigManagement({
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => openForEdit(tab)}
                     >
-                      <TableCell className="h-11 px-3 text-left align-middle tabular-nums text-muted-foreground">
-                        {tab.order}
+                      <TableCell className={mgmtTableCellNumericClass}>
+                        <TableCellText className="tabular-nums">{tab.order}</TableCellText>
                       </TableCell>
-                      <TableCell className="h-11 px-3 text-left align-middle font-medium">
-                        {tab.isSystem ? t(SYSTEM_TAB_CONFIG.nameI18nKey) : tab.name}
+                      <TableCell
+                        className={mgmtTableCellPrimaryClass}
+                        title={tab.isSystem ? t(SYSTEM_TAB_CONFIG.nameI18nKey) : tab.name}
+                      >
+                        <TableCellText>
+                          {tab.isSystem ? t(SYSTEM_TAB_CONFIG.nameI18nKey) : tab.name}
+                        </TableCellText>
                       </TableCell>
-                      <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm hidden sm:table-cell">
-                        {tab.icon || "—"}
+                      <TableCell className={`${mgmtTableCellMutedSmClass} hidden sm:table-cell`} title={tab.icon ?? undefined}>
+                        <TableCellText>{tab.icon || "—"}</TableCellText>
                       </TableCell>
-                      <TableCell className="h-11 px-3 text-left align-middle text-muted-foreground text-sm tabular-nums">
-                        {tab._count?.fields ?? 0}
+                      <TableCell className={mgmtTableCellNumericClass}>
+                        <TableCellText className="tabular-nums">{tab._count?.fields ?? 0}</TableCellText>
                       </TableCell>
                     </TableRow>
                   ))
@@ -906,50 +904,78 @@ export function TabsConfigManagement({
                               const { row, section } = orderToRowSection(f.order);
                               const isFullRow = FULL_ROW_WIDGETS.has(f.fieldDefinition.widgetType);
                               return (
-                                <div className="flex flex-wrap gap-3">
-                                  <div className="w-16">
-                                    <Label className="text-xs text-muted-foreground">
-                                      {t("productsConfig.tabsConfig.row")}
-                                    </Label>
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      value={row}
-                                      onChange={(e) =>
-                                        updateFieldPlacement(
-                                          idx,
-                                          Number(e.target.value) || 1,
-                                          isFullRow ? undefined : section
-                                        )
-                                      }
-                                      className="h-8 text-xs"
-                                      disabled={saving}
-                                    />
-                                  </div>
-                                  {!isFullRow && (
+                                <>
+                                  <div className="flex flex-wrap gap-3">
                                     <div className="w-16">
                                       <Label className="text-xs text-muted-foreground">
-                                        {t("productsConfig.tabsConfig.section")}
+                                        {t("productsConfig.tabsConfig.row")}
                                       </Label>
                                       <Input
                                         type="number"
                                         min={1}
-                                        max={3}
-                                        value={section}
-                                        onChange={(e) => {
-                                          const v = Number(e.target.value);
+                                        value={row}
+                                        onChange={(e) =>
                                           updateFieldPlacement(
                                             idx,
-                                            row,
-                                            Math.min(3, Math.max(1, v || 1))
-                                          );
-                                        }}
+                                            Number(e.target.value) || 1,
+                                            isFullRow ? undefined : section
+                                          )
+                                        }
                                         className="h-8 text-xs"
                                         disabled={saving}
                                       />
                                     </div>
+                                    {!isFullRow && (
+                                      <div className="w-16">
+                                        <Label className="text-xs text-muted-foreground">
+                                          {t("productsConfig.tabsConfig.section")}
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          min={1}
+                                          max={3}
+                                          value={section}
+                                          onChange={(e) => {
+                                            const v = Number(e.target.value);
+                                            updateFieldPlacement(
+                                              idx,
+                                              row,
+                                              Math.min(3, Math.max(1, v || 1))
+                                            );
+                                          }}
+                                          className="h-8 text-xs"
+                                          disabled={saving}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                  {!isFullRow && f.colSpan < 3 && (
+                                    <div className="mt-2 flex flex-col gap-1 border-t pt-2">
+                                      <div className="flex items-center gap-2">
+                                        <Checkbox
+                                          id={`stretch-${f.fieldDefinitionId}`}
+                                          checked={f.stretchInRow}
+                                          onCheckedChange={(c) =>
+                                            setFieldStretchInRow(
+                                              f.fieldDefinitionId,
+                                              c === true
+                                            )
+                                          }
+                                          disabled={saving}
+                                        />
+                                        <Label
+                                          htmlFor={`stretch-${f.fieldDefinitionId}`}
+                                          className="cursor-pointer text-xs font-normal leading-none"
+                                        >
+                                          {t("productsConfig.tabsConfig.stretchInRow")}
+                                        </Label>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground pl-6">
+                                        {t("productsConfig.tabsConfig.stretchInRowHint")}
+                                      </p>
+                                    </div>
                                   )}
-                                </div>
+                                </>
                               );
                             })()}
                           </div>
@@ -989,7 +1015,7 @@ export function TabsConfigManagement({
                 >
                   {t("productsConfig.common.cancel")}
                 </Button>
-                <Button onClick={handleSave} disabled={saving}>
+                <Button onClick={handleSave} disabled={saving || (!isCreate && !tabEditDetailReady)}>
                   {saving && !deleteMut.isPending ? (
                     <Loader2 className="mr-2 size-4 animate-spin" />
                   ) : null}
@@ -1001,30 +1027,25 @@ export function TabsConfigManagement({
         </SheetContent>
       </Sheet>
 
-      <AlertDialog open={deleteTabDialogOpen} onOpenChange={setDeleteTabDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("productsConfig.deleteTab.title")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("productsConfig.deleteTab.description")} {t("productsConfig.common.cannotUndo")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={saving}>{t("productsConfig.common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                setDeleteTabDialogOpen(false);
-                handleDelete();
-              }}
-              disabled={saving || deleteMut.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {saving && deleteMut.isPending ? t("productsConfig.common.deleting") : t("users.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDestructiveDialog
+        open={deleteTabDialogOpen}
+        onOpenChange={setDeleteTabDialogOpen}
+        title={t("productsConfig.deleteTab.title")}
+        description={
+          <>
+            {t("productsConfig.deleteTab.description")} {t("productsConfig.common.cannotUndo")}
+          </>
+        }
+        cancelLabel={t("productsConfig.common.cancel")}
+        confirmLabel={t("users.delete")}
+        confirmPendingLabel={t("productsConfig.common.deleting")}
+        confirmPending={saving || deleteMut.isPending}
+        cancelDisabled={saving}
+        onConfirm={() => {
+          setDeleteTabDialogOpen(false);
+          handleDelete();
+        }}
+      />
 
       <Dialog open={addFieldDialogOpen} onOpenChange={setAddFieldDialogOpen}>
         <DialogContent className="sm:max-w-md" showCloseButton>

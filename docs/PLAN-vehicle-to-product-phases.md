@@ -217,9 +217,9 @@
 
 ---
 
-## Фаза 5: Config, Permissions, i18n, Parser
+## Фаза 5: Config, Permissions, i18n
 
-**Мета:** Оновити конфіг, права, локалізацію та parser import.
+**Мета:** Оновити конфіг, права та локалізацію. (Parser видалено з проекту.)
 
 **Порядок дій:**
 
@@ -244,19 +244,14 @@
    - `layout.routes.kanban` "Vehicle registry" → "Product registry" / "Реєстр товарів"
    - Інші ключі vehicleConfig, vehicleTypes — оновити на productConfig, productTypes
 
-5. **app/api/admin/parser/import/route.ts**
-   - `mapVehicleData` → `mapProductData`
-   - `body.vehicles` → `body.products` (API контракт — breaking change для клієнтів парсера!)
-   - Повідомлення "vehicles array is required" → "products array is required"
-   - **Увага:** Якщо зовнішній парсер надсилає `vehicles`, потрібна підтримка обох ключів або міграція клієнта
+5. ~~**app/api/admin/parser/import**~~ — видалено (parser не входить у проект)
 
 6. **prisma/seed-vehicle-cms.ts** → **prisma/seed-product-cms.ts**
    - Перейменувати файл
    - Оновити коментарі VehicleType → ProductType
    - Перевірити package.json scripts: `seed-vehicle-cms` → `seed-product-cms`
 
-7. **features/management/components/api-integrations/vmd-parser-config-sheet.tsx**
-   - Приклад `vehicles: [...]` → `products: [...]` (для документації API)
+7. ~~**vmd-parser-config-sheet**~~ — видалено
 
 8. **lib/query-keys.ts**
    - `vehicles` → `products`, `vehicle` → `product`
@@ -266,7 +261,7 @@
    - `ListVehiclesQuery` → `ListProductsQuery` (якщо ще не змінено в api.ts)
    - Коментар "vehicles" → "products"
 
-**Валідація:** `npm run build`, перевірити Management → Roles (права products/products_config), API docs, parser import.
+**Валідація:** `npm run build`, перевірити Management → Roles (права products/products_config), API docs.
 
 ---
 
@@ -288,7 +283,7 @@
 3. Записати в Serena:
    - Підсумок рефакторингу
    - Новий маппінг термінології
-   - Breaking changes (parser API body.vehicles → body.products, якщо змінено)
+   - Breaking changes (якщо були)
 
 **Валідація:** `npm run build`, `npm test` (якщо є), ручна перевірка основних flow.
 
@@ -345,4 +340,4 @@ UPDATE role_permissions SET section_id = 'products_config' WHERE section_id = 'v
 - [ ] TypeScript без помилок
 - [ ] (Фаза 3+) Catalog page відкривається
 - [ ] (Фаза 4+) Management → Data Model працює
-- [ ] (Фаза 5+) Permissions, API docs, parser import перевірені
+- [ ] (Фаза 5+) Permissions, API docs перевірені

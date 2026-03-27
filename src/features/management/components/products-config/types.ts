@@ -52,6 +52,7 @@ export type TabFieldItem = {
   colSpan: number;
   isRequired: boolean;
   sectionTitle: string | null;
+  stretchInRow?: boolean;
   fieldDefinition: FieldDefinitionItem;
 };
 

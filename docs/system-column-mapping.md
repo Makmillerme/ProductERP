@@ -93,7 +93,7 @@
 Після модернізації (PLAN-field-definitions-modernization):
 - Колонка «Системне» та Badge у формі видалено.
 - isSystem використовується лише для canDelete — системні поля не можна видалити.
-- API та Prisma зберігають isSystem для parser/import.
+- API та Prisma зберігають isSystem для canDelete (системні поля не можна видалити).
 
 ---
 

@@ -121,5 +121,5 @@
 - `src/features/vehicles/queries.ts`, `vehicles-page.tsx`, `vehicle-detail-sheet.tsx`, `dynamic-field-renderer.tsx` — Product типи
 - `vehicle-documents-tab.tsx` — `/api/products/{id}/documents`, ProductDoc
 - `config/vehicle-documents.ts` — ProductDoc (productId), VehicleDoc deprecated alias
-- API admin: vehicle-types → prisma.productType, categories _count.productTypes, tabs productTypeId, parser import product/productType
+- API admin: vehicle-types → prisma.productType, categories _count.productTypes, tabs productTypeId
 - Build пройшов успішно

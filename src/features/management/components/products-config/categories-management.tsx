@@ -44,24 +44,18 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/locale-provider";
-import { MANAGEMENT_STALE_MS } from "@/lib/query-keys";
+import { MANAGEMENT_STALE_MS, managementAdminKeys } from "@/lib/query-keys";
+import { fetchAdminCategories, fetchAdminProductTypes } from "@/lib/api/admin/catalog";
+import { adminMutationJson, adminDeleteAllowMissing } from "@/lib/api/admin/client";
+import { ManagementListLoading } from "@/components/management-list-states";
 import type { CategoryItem, ProductTypeItem } from "./types";
-
-const CATEGORIES_KEY = ["admin", "categories"] as const;
-const PRODUCT_TYPES_KEY = ["admin", "product-types"] as const;
 
 // ── API helpers ──────────────────────────────────────────────
 
 type TFn = (key: string) => string;
 
 async function fetchCategories(t: TFn): Promise<CategoryItem[]> {
-  const res = await fetch("/api/admin/categories");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadCategoriesFailed"));
-  }
-  const data = await res.json();
-  return data.categories ?? data ?? [];
+  return fetchAdminCategories(t) as Promise<CategoryItem[]>;
 }
 
 async function createCategory(
@@ -73,14 +67,11 @@ async function createCategory(
   },
   t: TFn
 ) {
-  const res = await fetch("/api/admin/categories", {
+  return adminMutationJson("/categories", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.categoriesConfig.createCategoryFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.categoriesConfig.createCategoryFailed"));
-  return data;
 }
 
 async function updateCategory(
@@ -93,34 +84,22 @@ async function updateCategory(
   },
   t: TFn
 ) {
-  const res = await fetch(`/api/admin/categories/${id}`, {
+  return adminMutationJson(`/categories/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.categoriesConfig.saveCategoryFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.categoriesConfig.saveCategoryFailed"));
-  return data;
 }
 
 async function deleteCategory(id: string, t: TFn) {
-  const res = await fetch(`/api/admin/categories/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.categoriesConfig.deleteCategoryFailed"));
-  }
+  await adminDeleteAllowMissing(
+    `/categories/${id}`,
+    t("productsConfig.categoriesConfig.deleteCategoryFailed")
+  );
 }
 
 async function fetchProductTypes(t: TFn): Promise<ProductTypeItem[]> {
-  const res = await fetch("/api/admin/product-types");
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("common.loadTypesFailed"));
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data : (data?.productTypes ?? data?.vehicleTypes ?? data ?? []);
+  return fetchAdminProductTypes(t) as Promise<ProductTypeItem[]>;
 }
 
 async function createProductType(
@@ -131,14 +110,11 @@ async function createProductType(
   },
   t: TFn
 ) {
-  const res = await fetch("/api/admin/product-types", {
+  return adminMutationJson("/product-types", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.categoriesConfig.createTypeFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.categoriesConfig.createTypeFailed"));
-  return data;
 }
 
 async function updateProductType(
@@ -150,24 +126,18 @@ async function updateProductType(
   },
   t: TFn
 ) {
-  const res = await fetch(`/api/admin/product-types/${id}`, {
+  return adminMutationJson(`/product-types/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    fallbackError: t("productsConfig.categoriesConfig.saveTypeFailed"),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? t("productsConfig.categoriesConfig.saveTypeFailed"));
-  return data;
 }
 
 async function deleteProductType(id: string, t: TFn) {
-  const res = await fetch(`/api/admin/product-types/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? t("productsConfig.categoriesConfig.deleteTypeFailed"));
-  }
+  await adminDeleteAllowMissing(
+    `/product-types/${id}`,
+    t("productsConfig.categoriesConfig.deleteTypeFailed")
+  );
 }
 
 // ── Types ────────────────────────────────────────────────────
@@ -228,13 +198,13 @@ export function CategoriesManagement() {
     isError: catIsError,
     error: catError,
   } = useQuery({
-    queryKey: CATEGORIES_KEY,
+    queryKey: managementAdminKeys.categories,
     queryFn: () => fetchCategories(t),
     staleTime: MANAGEMENT_STALE_MS,
   });
 
   const { data: allProductTypes = [] } = useQuery({
-    queryKey: PRODUCT_TYPES_KEY,
+    queryKey: managementAdminKeys.productTypes,
     queryFn: () => fetchProductTypes(t),
     staleTime: MANAGEMENT_STALE_MS,
   });
@@ -280,9 +250,44 @@ export function CategoriesManagement() {
 
   const createCatMut = useMutation({
     mutationFn: (body: Parameters<typeof createCategory>[0]) => createCategory(body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    onMutate: async (body) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.categories });
+      const prev = queryClient.getQueryData<CategoryItem[]>(managementAdminKeys.categories);
+      if (!prev) return { prev: undefined, optimisticId: "" };
+      const optimisticId = `optimistic-cat-${Date.now()}`;
+      const optimistic: CategoryItem = {
+        id: optimisticId,
+        name: body.name.trim(),
+        description: body.description?.trim() ?? null,
+        icon: body.icon?.trim() ?? null,
+        order: body.order ?? 0,
+        _count: { productTypes: 0, tabs: 1 },
+      };
+      queryClient.setQueryData(
+        managementAdminKeys.categories,
+        [...prev, optimistic].sort((a, b) => a.order - b.order)
+      );
+      return { prev, optimisticId };
+    },
+    onError: (_e, _b, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(managementAdminKeys.categories, ctx.prev);
+    },
+    onSuccess: (data, _body, ctx) => {
+      const row = data as CategoryItem;
+      const list = queryClient.getQueryData<CategoryItem[]>(managementAdminKeys.categories);
+      if (list && ctx?.optimisticId) {
+        queryClient.setQueryData(
+          managementAdminKeys.categories,
+          list.map((c) =>
+            c.id === ctx.optimisticId
+              ? { ...row, _count: { productTypes: 0, tabs: 1 } }
+              : c
+          )
+        );
+      } else {
+        void queryClient.invalidateQueries({ queryKey: managementAdminKeys.categories });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.categoryCreated"));
     },
   });
@@ -290,50 +295,215 @@ export function CategoriesManagement() {
   const updateCatMut = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Parameters<typeof updateCategory>[1] }) =>
       updateCategory(id, body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    onMutate: async ({ id, body }) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.categories });
+      const prev = queryClient.getQueryData<CategoryItem[]>(managementAdminKeys.categories);
+      if (!prev) return { prev: undefined };
+      queryClient.setQueryData(
+        managementAdminKeys.categories,
+        prev.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                ...(body.name !== undefined && { name: body.name }),
+                ...(body.description !== undefined && { description: body.description }),
+                ...(body.icon !== undefined && { icon: body.icon }),
+                ...(body.order !== undefined && { order: body.order }),
+              }
+            : c
+        )
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(managementAdminKeys.categories, ctx.prev);
+    },
+    onSuccess: (data, { id }) => {
+      const row = data as CategoryItem;
+      const list = queryClient.getQueryData<CategoryItem[]>(managementAdminKeys.categories);
+      if (list) {
+        queryClient.setQueryData(
+          managementAdminKeys.categories,
+          list.map((c) => (c.id === id ? { ...c, ...row, _count: c._count } : c))
+        );
+      }
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.categorySaved"));
     },
   });
 
   const deleteCatMut = useMutation({
     mutationFn: (id: string) => deleteCategory(id, t),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.categories });
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.productTypes });
+      const prevCats = queryClient.getQueryData<CategoryItem[]>(managementAdminKeys.categories);
+      const prevTypes = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      if (!prevCats) return { prevCats: undefined, prevTypes: undefined };
+      queryClient.setQueryData(
+        managementAdminKeys.categories,
+        prevCats.filter((c) => c.id !== id)
+      );
+      if (prevTypes) {
+        queryClient.setQueryData(
+          managementAdminKeys.productTypes,
+          prevTypes.filter((vt) => vt.categoryId !== id)
+        );
+      }
+      return { prevCats, prevTypes };
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prevCats) queryClient.setQueryData(managementAdminKeys.categories, ctx.prevCats);
+      if (ctx?.prevTypes) queryClient.setQueryData(managementAdminKeys.productTypes, ctx.prevTypes);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
-      queryClient.invalidateQueries({ queryKey: PRODUCT_TYPES_KEY });
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.categoryDeleted"));
     },
   });
 
   const createVtMut = useMutation({
     mutationFn: (body: Parameters<typeof createProductType>[0]) => createProductType(body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PRODUCT_TYPES_KEY });
-      queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    onMutate: async (body) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.productTypes });
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.categories });
+      const prevTypes = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      const prevCats = queryClient.getQueryData<CategoryItem[]>(managementAdminKeys.categories);
+      if (!prevTypes) return { prevTypes: undefined, prevCats: undefined, optimisticId: "", catId: null };
+      const optimisticId = `optimistic-vt-${Date.now()}`;
+      const catId = body.categoryId ?? null;
+      const optimistic: ProductTypeItem = {
+        id: optimisticId,
+        categoryId: catId,
+        name: body.name.trim(),
+        description: body.description?.trim() ?? null,
+        isAutoDetected: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        _count: { products: 0 },
+      };
+      queryClient.setQueryData(managementAdminKeys.productTypes, [...prevTypes, optimistic]);
+      if (prevCats && catId) {
+        queryClient.setQueryData(
+          managementAdminKeys.categories,
+          prevCats.map((c) =>
+            c.id === catId
+              ? {
+                  ...c,
+                  _count: {
+                    productTypes: (c._count?.productTypes ?? 0) + 1,
+                    tabs: c._count?.tabs ?? 0,
+                  },
+                }
+              : c
+          )
+        );
+      }
+      return { prevTypes, prevCats, optimisticId, catId };
+    },
+    onError: (_e, _b, ctx) => {
+      if (ctx?.prevTypes) queryClient.setQueryData(managementAdminKeys.productTypes, ctx.prevTypes);
+      if (ctx?.prevCats) queryClient.setQueryData(managementAdminKeys.categories, ctx.prevCats);
+    },
+    onSuccess: (data, _body, ctx) => {
+      const row = data as ProductTypeItem;
+      const types = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      if (types && ctx?.optimisticId) {
+        queryClient.setQueryData(
+          managementAdminKeys.productTypes,
+          types.map((vt) => (vt.id === ctx.optimisticId ? row : vt))
+        );
+      } else {
+        void queryClient.invalidateQueries({ queryKey: managementAdminKeys.productTypes });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.productTypeCreated"));
     },
   });
 
   const updateVtMut = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Parameters<typeof updateProductType>[1] }) =>
-      updateProductType(id, body, t),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PRODUCT_TYPES_KEY });
-      queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: Parameters<typeof updateProductType>[1];
+    }) => updateProductType(id, body, t),
+    onMutate: async ({ id, body }) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.productTypes });
+      const prevTypes = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      if (!prevTypes) return { prevTypes: undefined };
+      queryClient.setQueryData(
+        managementAdminKeys.productTypes,
+        prevTypes.map((vt) =>
+          vt.id === id
+            ? {
+                ...vt,
+                ...(body.name !== undefined && { name: body.name }),
+                ...(body.description !== undefined && { description: body.description }),
+                ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
+              }
+            : vt
+        )
+      );
+      return { prevTypes };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prevTypes) queryClient.setQueryData(managementAdminKeys.productTypes, ctx.prevTypes);
+    },
+    onSuccess: (data, { id }) => {
+      const row = data as ProductTypeItem;
+      const types = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      if (types) {
+        queryClient.setQueryData(
+          managementAdminKeys.productTypes,
+          types.map((vt) => (vt.id === id ? { ...vt, ...row } : vt))
+        );
+      }
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.productTypeSaved"));
     },
   });
 
   const deleteVtMut = useMutation({
     mutationFn: (id: string) => deleteProductType(id, t),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.productTypes });
+      await queryClient.cancelQueries({ queryKey: managementAdminKeys.categories });
+      const prevTypes = queryClient.getQueryData<ProductTypeItem[]>(managementAdminKeys.productTypes);
+      const prevCats = queryClient.getQueryData<CategoryItem[]>(managementAdminKeys.categories);
+      const removed = prevTypes?.find((vt) => vt.id === id);
+      if (prevTypes) {
+        queryClient.setQueryData(
+          managementAdminKeys.productTypes,
+          prevTypes.filter((vt) => vt.id !== id)
+        );
+      }
+      if (prevCats && removed?.categoryId) {
+        const cid = removed.categoryId;
+        queryClient.setQueryData(
+          managementAdminKeys.categories,
+          prevCats.map((c) =>
+            c.id === cid
+              ? {
+                  ...c,
+                  _count: {
+                    productTypes: Math.max(0, (c._count?.productTypes ?? 0) - 1),
+                    tabs: c._count?.tabs ?? 0,
+                  },
+                }
+              : c
+          )
+        );
+      }
+      return { prevTypes, prevCats };
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prevTypes) queryClient.setQueryData(managementAdminKeys.productTypes, ctx.prevTypes);
+      if (ctx?.prevCats) queryClient.setQueryData(managementAdminKeys.categories, ctx.prevCats);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PRODUCT_TYPES_KEY });
-      queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       toast.success(t("toasts.productTypeDeleted"));
     },
   });
@@ -528,9 +698,7 @@ export function CategoriesManagement() {
 
       {/* Tree */}
       {!hasMounted || catLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <ManagementListLoading />
       ) : filteredTree.length === 0 ? (
         <div className="flex min-h-[10rem] w-full flex-col items-center justify-center gap-2 rounded-md border py-10 text-center">
           <p className="text-sm text-muted-foreground px-4">

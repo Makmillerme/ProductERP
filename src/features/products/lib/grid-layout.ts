@@ -31,6 +31,35 @@ export const FULL_ROW_WIDGETS = new Set([
 
 const FULL_WIDTH_WIDGETS = FULL_ROW_WIDGETS;
 
+function rowMajorBefore(
+  a: { row: number; col: number },
+  b: { row: number; col: number }
+): boolean {
+  return a.row < b.row || (a.row === b.row && a.col < b.col);
+}
+
+/** Курсор після розміщення поля шириною span колонок. */
+function advanceCursor(
+  row: number,
+  col: number,
+  span: number,
+  cols: number
+): [number, number] {
+  let c = col + span;
+  let r = row;
+  while (c >= cols) {
+    r++;
+    c -= cols;
+  }
+  return [r, c];
+}
+
+/**
+ * Сітка без «стрибка» курсора назад (як було при row=targetR,col=targetC після while —
+ * full-row накладався на попередні поля та забирав «+»).
+ * Якщо ціль з order попереду поточного курсора — доповнюємо «+» до цілі.
+ * Якщо ціль позаду — ставимо в поточну комірку; full-row доповнює ряд «+» і переноситься вниз.
+ */
 export function computeGridLayout(
   fields: GridField[],
   cols = 3
@@ -45,37 +74,42 @@ export function computeGridLayout(
       FULL_WIDTH_WIDGETS.has(field.widgetType) || field.colSpan >= cols;
     const span = isFullWidth ? cols : Math.min(field.colSpan, cols);
 
-    const useTarget =
-      field.targetRow != null && field.targetCol != null;
-    const useOrderAsPosition = !useTarget;
-    const targetR = useTarget
-      ? field.targetRow!
-      : Math.floor(field.order / cols);
-    const targetC = useTarget
-      ? field.targetCol!
-      : isFullWidth
-        ? 0
-        : field.order % cols;
+    let targetR: number;
+    let targetC: number;
+    if (field.targetRow != null && field.targetCol != null) {
+      targetR = field.targetRow;
+      targetC = field.targetCol;
+    } else {
+      targetR = Math.floor(field.order / cols);
+      targetC = isFullWidth ? 0 : field.order % cols;
+    }
 
-    if (useTarget || useOrderAsPosition) {
-      while (row < targetR || (row === targetR && col < targetC)) {
-        items.push({ type: "empty", row, col });
-        col++;
-        if (col >= cols) {
-          row++;
-          col = 0;
-        }
+    let tr = targetR;
+    let tc = targetC;
+    if (rowMajorBefore({ row: tr, col: tc }, { row, col })) {
+      tr = row;
+      tc = col;
+    }
+
+    while (row < tr || (row === tr && col < tc)) {
+      items.push({ type: "empty", row, col });
+      col++;
+      if (col >= cols) {
+        row++;
+        col = 0;
       }
-      row = targetR;
-      col = targetC;
-    } else if (col + span > cols) {
+    }
+
+    if (isFullWidth && col > 0) {
       while (col < cols) {
         items.push({ type: "empty", row, col });
         col++;
       }
       row++;
       col = 0;
-    } else if (isFullWidth && col > 0) {
+    }
+
+    if (!isFullWidth && col + span > cols) {
       while (col < cols) {
         items.push({ type: "empty", row, col });
         col++;
@@ -85,12 +119,7 @@ export function computeGridLayout(
     }
 
     items.push({ type: "field", field, row, col });
-    col += span;
-
-    if (col >= cols) {
-      row++;
-      col = 0;
-    }
+    [row, col] = advanceCursor(row, col, span, cols);
   }
 
   while (col > 0 && col < cols) {
